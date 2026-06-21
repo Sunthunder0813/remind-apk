@@ -40,15 +40,27 @@ class TodoRemoteViewsFactory(
             val arr = JSONArray(rowsJson)
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
+                // Separator rows only ever carry {"type": "separator"} — no
+                // noteId/title/etc. Reading those fields unconditionally
+                // with getString() threw a JSONException ("No value for
+                // noteId") the moment the parser hit a separator, and that
+                // exception was silently swallowed by the outer try/catch
+                // below, leaving `rows` with only whatever had been parsed
+                // BEFORE the crash. Since the separator sits between the
+                // two notes, this is exactly why the second note's header
+                // and checklist items were always missing — they were
+                // never actually parsed at all, not a rendering issue.
+                // optString()/has() everywhere makes every field optional
+                // and tolerant of rows that don't carry it.
                 rows.add(
                     TodoRow(
-                        type = obj.getString("type"),
-                        noteId = obj.getString("noteId"),
-                        itemId = if (obj.isNull("itemId")) null else obj.getString("itemId"),
-                        title = if (obj.isNull("title")) null else obj.getString("title"),
-                        time = if (obj.isNull("time")) null else obj.getString("time"),
-                        text = if (obj.isNull("text")) null else obj.getString("text"),
-                        done = if (obj.has("done")) obj.getBoolean("done") else false
+                        type = obj.optString("type", "item"),
+                        noteId = obj.optString("noteId", ""),
+                        itemId = if (obj.has("itemId") && !obj.isNull("itemId")) obj.getString("itemId") else null,
+                        title = if (obj.has("title") && !obj.isNull("title")) obj.getString("title") else null,
+                        time = if (obj.has("time") && !obj.isNull("time")) obj.getString("time") else null,
+                        text = if (obj.has("text") && !obj.isNull("text")) obj.getString("text") else null,
+                        done = if (obj.has("done") && !obj.isNull("done")) obj.getBoolean("done") else false
                     )
                 )
             }

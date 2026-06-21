@@ -31,24 +31,21 @@ class TodoWidgetProvider : AppWidgetProvider() {
 
             val views = RemoteViews(context.packageName, R.layout.todo_widget_layout)
 
-            // Set up the RemoteViews collection (ListView) for checklist rows
+            // Set up the RemoteViews collection (ListView) for checklist rows.
+            // The factory (TodoRemoteViewsFactory) reads todo_rows fresh from
+            // HomeWidgetPlugin's SharedPreferences itself in onDataSetChanged()
+            // — it does NOT read it from this intent — so there's no need to
+            // (and we must not) stuff rowsJson into the intent as if that were
+            // the data source; doing so was misleading and unused.
             val serviceIntent = Intent(context, TodoRemoteViewsService::class.java).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                putExtra("todo_rows", rowsJson)
+                // Unique per appWidgetId so Android never treats two widget
+                // instances' RemoteViewsFactory as interchangeable/cacheable
+                // against each other.
+                data = android.net.Uri.parse("remind://widget/$appWidgetId")
             }
             views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
             views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_text)
-
-            // setRemoteAdapter alone doesn't reliably force the factory's
-            // onDataSetChanged() to re-run on every Android version/launcher
-            // if it decides the adapter intent "hasn't changed" — that's
-            // why a delete from the Calendar tab (which only goes through
-            // HomeWidget.updateWidget() -> onUpdate() -> here) could leave
-            // a stale row visible, while the toggle path (which calls
-            // notifyAppWidgetViewDataChanged directly from Kotlin) always
-            // worked. Forcing it here covers every caller of updateWidget,
-            // not just the toggle-specific one in TodoToggleReceiver.
-            appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list_view)
 
             // Pending intent template — each row fills in its own noteId+itemId
             val toggleIntent = Intent(context, TodoToggleReceiver::class.java)
@@ -69,7 +66,18 @@ class TodoWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_header, launchPending)
 
+            // Commit the RemoteViews to the actual widget FIRST.
             appWidgetManager.updateAppWidget(appWidgetId, views)
+
+            // THEN force the ListView's adapter/factory to refetch fresh data.
+            // Calling this BEFORE updateAppWidget (as before) raced against
+            // the widget instance still running its previous factory/intent —
+            // that ordering bug is what caused only one note's rows to ever
+            // appear: whichever refresh's notifyAppWidgetViewDataChanged call
+            // landed last against a half-committed widget state "won," and
+            // the other note's rows were silently dropped instead of both
+            // appearing together.
+            appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list_view)
         }
     }
 }

@@ -85,6 +85,8 @@ class WidgetService {
       }
     }
 
+    debugPrint('[WidgetRefresh] FINAL rows being written (${rows.length} total): '
+        '${rows.map((r) => '${r['type']}:${r['title'] ?? r['text']}').toList()}');
     await HomeWidget.saveWidgetData<String>('todo_rows', jsonEncode(rows));
     await HomeWidget.updateWidget(name: _androidWidgetName);
   }

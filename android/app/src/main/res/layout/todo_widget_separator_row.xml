@@ -1,16 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- RemoteViews only allows a fixed allowlist of view classes — a plain
+     <View> throws "Class not allowed to be inflated android.view.View"
+     at render time. The fix is the same trick used for the original
+     widget's top-level divider: a zero-height LinearLayout doesn't
+     actually need height to show a line — instead we give the OUTER
+     FrameLayout the 1dp visual height via background color directly,
+     with no child <View> at all. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="12dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
     android:paddingTop="5dp"
     android:paddingBottom="5dp"
     android:paddingStart="20dp"
     android:paddingEnd="8dp">
 
-    <View
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_gravity="center_vertical"
         android:background="#33FFFFFF" />
 
-</FrameLayout>
+</LinearLayout>
