@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rounded dark card with a soft purple glow ring, layered via inset
+     drawables — outer layer is a blurred-looking glow (semi-transparent
+     purple, larger radius), inner layer is the solid card with a crisp
+     purple border. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Soft outer glow -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#33AC5FDB" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <!-- Inset solid card with crisp border -->
+    <item
+        android:left="3dp"
+        android:top="3dp"
+        android:right="3dp"
+        android:bottom="3dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#29262B" />
+            <corners android:radius="18dp" />
+            <stroke
+                android:width="1.5dp"
+                android:color="#AC5FDB" />
+        </shape>
+    </item>
+</layer-list>

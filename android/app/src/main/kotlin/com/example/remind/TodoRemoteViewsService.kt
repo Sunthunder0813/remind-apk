@@ -1,0 +1,100 @@
+package com.example.remind
+
+import android.content.Context
+import android.content.Intent
+import android.widget.RemoteViews
+import android.widget.RemoteViewsService
+import org.json.JSONArray
+
+class TodoRemoteViewsService : RemoteViewsService() {
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
+        return TodoRemoteViewsFactory(applicationContext, intent)
+    }
+}
+
+class TodoRemoteViewsFactory(
+    private val context: Context,
+    intent: Intent
+) : RemoteViewsService.RemoteViewsFactory {
+
+    private val rows = mutableListOf<TodoRow>()
+
+    data class TodoRow(
+        val noteId: String,
+        val itemId: String?,
+        val text: String,
+        val done: Boolean
+    )
+
+    override fun onCreate() {}
+
+    override fun onDataSetChanged() {
+        rows.clear()
+        try {
+            val rowsJson = es.antonborri.home_widget.HomeWidgetPlugin
+                .getData(context)
+                .getString("todo_rows", "[]") ?: "[]"
+            val arr = JSONArray(rowsJson)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                rows.add(
+                    TodoRow(
+                        noteId = obj.getString("noteId"),
+                        itemId = if (obj.isNull("itemId")) null else obj.getString("itemId"),
+                        text = obj.getString("text"),
+                        done = obj.getBoolean("done")
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onDestroy() {}
+
+    override fun getCount() = rows.size
+
+    override fun getViewAt(position: Int): RemoteViews {
+        val row = rows[position]
+        val views = RemoteViews(context.packageName, R.layout.todo_widget_row)
+
+        views.setTextViewText(R.id.row_text, row.text)
+
+        // Checkbox icon — filled if done, outline if not. Uses our own
+        // vector drawables (android.R.drawable.checkbox_on/off_background
+        // are legacy "background layer" assets meant to sit behind a real
+        // CheckBox widget's foreground — used alone in an ImageView they
+        // render as invisible/blank on most themes, which is why nothing
+        // appeared to change on tap even though the underlying done value
+        // was flipping correctly.
+        val iconRes = if (row.done)
+            R.drawable.todo_checkbox_checked
+        else
+            R.drawable.todo_checkbox_unchecked  
+
+        views.setImageViewResource(R.id.row_checkbox, iconRes)
+
+        // Strikethrough text when done
+        val paintFlags = if (row.done)
+            android.graphics.Paint.STRIKE_THRU_TEXT_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG
+        else
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        views.setInt(R.id.row_text, "setPaintFlags", paintFlags)
+
+        // Fill in the intent template with this row's ids
+        val fillIntent = Intent().apply {
+            putExtra("noteId", row.noteId)
+            putExtra("itemId", row.itemId ?: "")
+            putExtra("isItemToggle", row.itemId != null)
+        }
+        views.setOnClickFillInIntent(R.id.row_root, fillIntent)
+
+        return views
+    }
+
+    override fun getLoadingView() = null
+    override fun getViewTypeCount() = 1
+    override fun getItemId(position: Int) = position.toLong()
+    override fun hasStableIds() = true
+}
