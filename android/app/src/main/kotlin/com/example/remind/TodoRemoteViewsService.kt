@@ -20,10 +20,13 @@ class TodoRemoteViewsFactory(
     private val rows = mutableListOf<TodoRow>()
 
     data class TodoRow(
+        val type: String,
         val noteId: String,
-        val itemId: String?,
-        val text: String,
-        val done: Boolean
+        val itemId: String? = null,
+        val title: String? = null,
+        val time: String? = null,
+        val text: String? = null,
+        val done: Boolean = false
     )
 
     override fun onCreate() {}
@@ -39,10 +42,13 @@ class TodoRemoteViewsFactory(
                 val obj = arr.getJSONObject(i)
                 rows.add(
                     TodoRow(
+                        type = obj.getString("type"),
                         noteId = obj.getString("noteId"),
                         itemId = if (obj.isNull("itemId")) null else obj.getString("itemId"),
-                        text = obj.getString("text"),
-                        done = obj.getBoolean("done")
+                        title = if (obj.isNull("title")) null else obj.getString("title"),
+                        time = if (obj.isNull("time")) null else obj.getString("time"),
+                        text = if (obj.isNull("text")) null else obj.getString("text"),
+                        done = if (obj.has("done")) obj.getBoolean("done") else false
                     )
                 )
             }
@@ -57,44 +63,59 @@ class TodoRemoteViewsFactory(
 
     override fun getViewAt(position: Int): RemoteViews {
         val row = rows[position]
-        val views = RemoteViews(context.packageName, R.layout.todo_widget_row)
+        return when (row.type) {
+            "header" -> {
+                val views = RemoteViews(context.packageName, R.layout.todo_widget_header_row)
+                views.setTextViewText(R.id.note_title, row.title ?: "")
+                views.setTextViewText(R.id.note_time, row.time ?: "")
+                views.setViewVisibility(
+                    R.id.note_time,
+                    if (row.time.isNullOrEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+                )
+                views
+            }
+            "separator" -> RemoteViews(context.packageName, R.layout.todo_widget_separator_row)
+            else -> {
+                val views = RemoteViews(context.packageName, R.layout.todo_widget_row)
 
-        views.setTextViewText(R.id.row_text, row.text)
+                views.setTextViewText(R.id.row_text, row.text ?: "")
 
-        // Checkbox icon — filled if done, outline if not. Uses our own
-        // vector drawables (android.R.drawable.checkbox_on/off_background
-        // are legacy "background layer" assets meant to sit behind a real
-        // CheckBox widget's foreground — used alone in an ImageView they
-        // render as invisible/blank on most themes, which is why nothing
-        // appeared to change on tap even though the underlying done value
-        // was flipping correctly.
-        val iconRes = if (row.done)
-            R.drawable.todo_checkbox_checked
-        else
-            R.drawable.todo_checkbox_unchecked  
+                // Checkbox icon — filled if done, outline if not. Uses our own
+                // vector drawables (android.R.drawable.checkbox_on/off_background
+                // are legacy "background layer" assets meant to sit behind a real
+                // CheckBox widget's foreground — used alone in an ImageView they
+                // render as invisible/blank on most themes, which is why nothing
+                // appeared to change on tap even though the underlying done value
+                // was flipping correctly.
+                val iconRes = if (row.done)
+                    R.drawable.todo_checkbox_checked
+                else
+                    R.drawable.todo_checkbox_unchecked
 
-        views.setImageViewResource(R.id.row_checkbox, iconRes)
+                views.setImageViewResource(R.id.row_checkbox, iconRes)
 
-        // Strikethrough text when done
-        val paintFlags = if (row.done)
-            android.graphics.Paint.STRIKE_THRU_TEXT_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG
-        else
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        views.setInt(R.id.row_text, "setPaintFlags", paintFlags)
+                // Strikethrough text when done
+                val paintFlags = if (row.done)
+                    android.graphics.Paint.STRIKE_THRU_TEXT_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG
+                else
+                    android.graphics.Paint.ANTI_ALIAS_FLAG
+                views.setInt(R.id.row_text, "setPaintFlags", paintFlags)
 
-        // Fill in the intent template with this row's ids
-        val fillIntent = Intent().apply {
-            putExtra("noteId", row.noteId)
-            putExtra("itemId", row.itemId ?: "")
-            putExtra("isItemToggle", row.itemId != null)
+                // Fill in the intent template with this row's ids
+                val fillIntent = Intent().apply {
+                    putExtra("noteId", row.noteId)
+                    putExtra("itemId", row.itemId ?: "")
+                    putExtra("isItemToggle", row.itemId != null)
+                }
+                views.setOnClickFillInIntent(R.id.row_root, fillIntent)
+
+                views
+            }
         }
-        views.setOnClickFillInIntent(R.id.row_root, fillIntent)
-
-        return views
     }
 
     override fun getLoadingView() = null
-    override fun getViewTypeCount() = 1
+    override fun getViewTypeCount() = 3
     override fun getItemId(position: Int) = position.toLong()
     override fun hasStableIds() = true
 }

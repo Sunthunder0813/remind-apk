@@ -12,9 +12,22 @@ const String _kChecklistUpdatePortName = 'remind_checklist_update_port';
 class WidgetService {
   static const String _androidWidgetName = 'TodoWidgetProvider';
 
-  // Each row is one checklist item, or — for a note with no checklist —
-  // the note itself (itemId null, toggles Note.isCompleted). The native
-  // RemoteViewsFactory reads this same JSON shape straight out of
+  static String _formatWidgetTime(DateTime dt) {
+    final hour = dt.hour == 0
+        ? 12
+        : dt.hour > 12
+            ? dt.hour - 12
+            : dt.hour;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour < 12 ? 'AM' : 'PM';
+    return '$hour:$minute $period';
+  }
+
+  // Each note becomes a grouped widget block:
+  // - note header row (title + time, if any)
+  // - one row per checklist item
+  // - separator row between notes
+  // The native RemoteViewsFactory reads this JSON straight out of
   // home_widget's SharedPreferences store.
   static Future<void> refreshWidget(List<Note> allNotes) async {
     final now = DateTime.now();
@@ -30,23 +43,45 @@ class WidgetService {
     debugPrint('[WidgetRefresh] todayNotes ids: ${todayNotes.map((n) => n.id).toList()}');
 
     final rows = <Map<String, dynamic>>[];
-    for (final note in todayNotes) {
-      if (note.checklistItems.isEmpty) {
-        rows.add({
-          'noteId': note.id,
-          'itemId': null,
-          'text': note.title,
-          'done': note.isCompleted,
-        });
-      } else {
+    for (var index = 0; index < todayNotes.length; index++) {
+      final note = todayNotes[index];
+      final groupDate = note.reminderAt ?? note.calendarDate;
+      rows.add({
+        'type': 'header',
+        'noteId': note.id,
+        'title': note.title,
+        'time': groupDate != null && note.reminderAt != null
+            ? _formatWidgetTime(groupDate)
+            : null,
+      });
+
+      if (note.checklistItems.isNotEmpty) {
         for (final item in note.checklistItems) {
           rows.add({
+            'type': 'item',
             'noteId': note.id,
             'itemId': item.id,
             'text': item.text,
             'done': item.done,
           });
         }
+      } else {
+        final fallbackText = note.content.trim().isNotEmpty
+            ? note.content.trim()
+            : note.title;
+        rows.add({
+          'type': 'item',
+          'noteId': note.id,
+          'itemId': null,
+          'text': fallbackText,
+          'done': note.isCompleted,
+        });
+      }
+
+      if (index != todayNotes.length - 1) {
+        rows.add({
+          'type': 'separator',
+        });
       }
     }
 
