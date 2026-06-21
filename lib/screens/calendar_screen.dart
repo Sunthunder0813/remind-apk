@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../models/note.dart';
@@ -22,10 +23,25 @@ class CalendarScreenState extends State<CalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   List<Note> _notesWithReminders = [];
 
+  // Live self-clear for the alarm icon on this tab's day list: re-arms
+  // for whichever currently-loaded reminder note's reminderAt is
+  // soonest, so the icon disappears the moment that note's reminder
+  // passes while the user is just sitting on the Calendar tab — not only
+  // on the next tab switch/day select that happens to re-trigger
+  // _loadNotes(). Same pattern as NotesScreen's _reminderSweepTimer; the
+  // actual clearing logic still lives in DatabaseService's sweep.
+  Timer? _reminderSweepTimer;
+
   @override
   void initState() {
     super.initState();
     _loadNotes();
+  }
+
+  @override
+  void dispose() {
+    _reminderSweepTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadNotes() async {
@@ -44,6 +60,31 @@ class CalendarScreenState extends State<CalendarScreen> {
           .where((n) => n.isCalendarReminder == true)
           .toList();
     });
+    _scheduleReminderSweep();
+  }
+
+  // Finds the soonest still-future reminderAt among currently loaded
+  // reminder notes and arms a one-shot Timer for exactly that moment
+  // (capped at 1 minute so a far-future reminder doesn't sit on one
+  // giant Timer). When it fires, _loadNotes() re-runs, which re-reads
+  // from DatabaseService — that read is what actually sweeps the
+  // now-expired reminderAt to null and removes the alarm icon.
+  void _scheduleReminderSweep() {
+    _reminderSweepTimer?.cancel();
+
+    final now = DateTime.now();
+    DateTime? soonest;
+    for (final note in _notesWithReminders) {
+      final r = note.reminderAt;
+      if (r != null && r.isAfter(now)) {
+        if (soonest == null || r.isBefore(soonest)) soonest = r;
+      }
+    }
+    if (soonest == null) return;
+
+    final remaining = soonest.difference(now);
+    final wait = remaining < const Duration(minutes: 1) ? remaining : const Duration(minutes: 1);
+    _reminderSweepTimer = Timer(wait, _loadNotes);
   }
 
   // Public refresh hook so the open calendar tab can react to widget

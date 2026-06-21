@@ -94,6 +94,13 @@ class TodoRemoteViewsFactory(
                 views
             }
             "separator" -> RemoteViews(context.packageName, R.layout.todo_widget_separator_row)
+            "detail" -> {
+                // Plain note content shown under a title — NOT a checklist
+                // item. No checkbox, no click intent, just text.
+                val views = RemoteViews(context.packageName, R.layout.todo_widget_detail_row)
+                views.setTextViewText(R.id.detail_text, row.text ?: "")
+                views
+            }
             else -> {
                 val views = RemoteViews(context.packageName, R.layout.todo_widget_row)
 
@@ -134,7 +141,7 @@ class TodoRemoteViewsFactory(
     }
 
     override fun getLoadingView() = null
-    override fun getViewTypeCount() = 3
+    override fun getViewTypeCount() = 4
     override fun getItemId(position: Int) = position.toLong()
     override fun hasStableIds() = true
 }

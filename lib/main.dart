@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
+import 'screens/note_editor_screen.dart';
 import 'services/database_service.dart';
 import 'services/notification_service.dart';
 import 'services/anime_like_service.dart';
@@ -19,6 +20,11 @@ import 'services/widget_service.dart';
 // story of why that didn't work), but raw isolate-to-isolate messaging
 // via IsolateNameServer works regardless of which isolate sent it.
 const String kChecklistUpdatePortName = 'remind_checklist_update_port';
+
+// Lets NotificationService push the app straight to a specific note's
+// editor from anywhere — no BuildContext needed at the call site, since
+// the key carries its own NavigatorState once the MaterialApp has mounted.
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // Broadcast stream any number of open screens can subscribe to — backed
 // by the ReceivePort registered below. Using a StreamController instead
@@ -50,6 +56,19 @@ void main() async {
   // whenever a checklist checkbox is tapped on the home screen widget.
   await HomeWidget.registerBackgroundCallback(widgetBackgroundCallback);
 
+  // Warm tap: app already running, user taps a reminder notification.
+  // Listens for the rest of the app's lifetime — one subscription covers
+  // every future tap, not just the next one.
+  NotificationService.instance.noteTapStream.stream.listen(_openNoteFromNotification);
+
+  // Cold start: this very launch was caused by tapping a notification.
+  // Must run AFTER NotificationService.instance.init() (already awaited
+  // above) so getNotificationAppLaunchDetails() has something to read.
+  // Deferred to right after runApp() below (via addPostFrameCallback)
+  // since navigatorKey.currentState is null until the widget tree has
+  // actually mounted at least one frame.
+  final coldStartNoteId = await NotificationService.instance.getLaunchNoteId();
+
   // Registers the single ReceivePort that the background isolate sends
   // toggle notifications into. Messages received here are immediately
   // re-broadcast on checklistUpdateStream for any open screen to react to.
@@ -61,6 +80,26 @@ void main() async {
   });
 
   runApp(const RemindApp());
+
+  if (coldStartNoteId != null) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _openNoteFromNotification(coldStartNoteId);
+    });
+  }
+}
+
+// Shared by both the warm-tap stream listener and the cold-start path
+// above. Looks the note up fresh from Hive (not any in-memory list,
+// since at cold start nothing's loaded yet) and pushes NoteEditorScreen
+// for it via the global navigatorKey — works with no BuildContext.
+void _openNoteFromNotification(String noteId) {
+  final note = DatabaseService.instance.getNoteById(noteId);
+  final nav = navigatorKey.currentState;
+  if (note == null || nav == null) {
+    debugPrint('[NotificationTap] note=$noteId not found, or navigator not ready yet');
+    return;
+  }
+  nav.push(MaterialPageRoute(builder: (_) => NoteEditorScreen(note: note)));
 }
 
 class RemindApp extends StatelessWidget {
@@ -69,6 +108,7 @@ class RemindApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Remind',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

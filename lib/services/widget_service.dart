@@ -72,16 +72,18 @@ class WidgetService {
             'done': item.done,
           });
         }
-      } else {
-        final fallbackText = note.content.trim().isNotEmpty
-            ? note.content.trim()
-            : note.title;
+      } else if (note.content.trim().isNotEmpty) {
+        // Only add a sub-row when there's real body text to show as a
+        // detail line under the title. This is plain note content, not
+        // a checklist item, so it must render with NO checkbox and NO
+        // tap-to-toggle behavior — hence the distinct 'detail' type
+        // instead of reusing 'item'. A note with no checklist AND no
+        // content (just a bare title, e.g. "Untitled") gets no sub-row
+        // at all — just the header.
         rows.add({
-          'type': 'item',
+          'type': 'detail',
           'noteId': note.id,
-          'itemId': null,
-          'text': fallbackText,
-          'done': note.isCompleted,
+          'text': note.content.trim(),
         });
       }
 

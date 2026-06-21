@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -9,6 +10,15 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
+
+  // Fires with a noteId every time the user taps a reminder notification
+  // while the app is already running (warm tap — onDidReceiveNotificationResponse).
+  // main.dart listens on this to push NoteEditorScreen for that note. The
+  // COLD-start case (app fully closed, notification launches it) is handled
+  // separately via getNotificationAppLaunchDetails() in init(), since the
+  // plugin's tap callback doesn't fire for the launch that's already in
+  // progress when the process starts fresh.
+  final StreamController<String> noteTapStream = StreamController<String>.broadcast();
 
   Future<void> init() async {
     tz_data.initializeTimeZones();
@@ -34,7 +44,19 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _plugin.initialize(settings);
+    await _plugin.initialize(
+      settings,
+      // Warm tap: app is already running (foreground or background) when
+      // the user taps the notification. payload is whatever string we
+      // passed into zonedSchedule below — here, just the raw noteId.
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        final noteId = response.payload;
+        if (noteId != null && noteId.isNotEmpty) {
+          debugPrint('[NotificationService] Warm tap, noteId: $noteId');
+          noteTapStream.add(noteId);
+        }
+      },
+    );
 
     final granted = await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
@@ -44,6 +66,20 @@ class NotificationService {
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestExactAlarmsPermission();
+  }
+
+  // Cold start: the app process wasn't running at all, and THIS launch
+  // was caused by the user tapping a notification. The plugin can't fire
+  // onDidReceiveNotificationResponse for that tap (nothing was listening
+  // yet when it happened) — instead it remembers the launch details and
+  // hands them back here once initialize() has run. Returns the noteId
+  // payload if that's what happened, or null for an ordinary cold start.
+  Future<String?> getLaunchNoteId() async {
+    final details = await _plugin.getNotificationAppLaunchDetails();
+    if (details == null || !details.didNotificationLaunchApp) return null;
+    final payload = details.notificationResponse?.payload;
+    debugPrint('[NotificationService] Cold-start launch noteId: $payload');
+    return (payload != null && payload.isNotEmpty) ? payload : null;
   }
 
   Future<void> scheduleNoteReminder({
@@ -92,6 +128,9 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
+      // payload carries the noteId through to the tap handler above —
+      // this is the only way the handler knows WHICH note to open.
+      payload: noteId,
     );
 
     debugPrint('[NotificationService] Scheduled "$title" at $tzScheduled');

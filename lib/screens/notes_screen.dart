@@ -149,6 +149,16 @@ class NotesScreenState extends State<NotesScreen> {
   // list. Doesn't persist across app restarts; just a session preference.
   bool _isGridView = true;
 
+  // Live self-clear for the alarm icon on note cards: re-arms itself for
+  // whichever currently-loaded note's reminderAt is soonest, so the icon
+  // disappears the moment that note's reminder time passes while this
+  // screen is just sitting open — not only on the next folder
+  // nav/pull-to-refresh that happens to re-trigger _loadData(). The
+  // actual clearing logic still lives in DatabaseService's sweep; this
+  // timer just calls _loadData() again at the right moment so that sweep
+  // runs and the result reaches the UI.
+  Timer? _reminderSweepTimer;
+
   // ── Edit mode (single-select for theming — pick exactly one note OR
   //    one folder, then the picker opens immediately) ─────────────────────
   bool _isEditMode = false;
@@ -328,6 +338,7 @@ class NotesScreenState extends State<NotesScreen> {
 
   @override
   void dispose() {
+    _reminderSweepTimer?.cancel();
     super.dispose();
   }
 
@@ -336,6 +347,31 @@ class NotesScreenState extends State<NotesScreen> {
       _notes = DatabaseService.instance.getAllNotes();
       _categories = DatabaseService.instance.getAllCategories();
     });
+    _scheduleReminderSweep();
+  }
+
+  // Finds the soonest still-future reminderAt among currently loaded
+  // notes and arms a one-shot Timer for exactly that moment (capped at 1
+  // minute so a far-future reminder doesn't sit on one giant Timer the
+  // whole time). When it fires, _loadData() re-runs, which re-reads from
+  // DatabaseService — that read is what actually sweeps the now-expired
+  // reminderAt to null and removes the alarm icon from that card.
+  void _scheduleReminderSweep() {
+    _reminderSweepTimer?.cancel();
+
+    final now = DateTime.now();
+    DateTime? soonest;
+    for (final note in _notes) {
+      final r = note.reminderAt;
+      if (r != null && r.isAfter(now)) {
+        if (soonest == null || r.isBefore(soonest)) soonest = r;
+      }
+    }
+    if (soonest == null) return;
+
+    final remaining = soonest.difference(now);
+    final wait = remaining < const Duration(minutes: 1) ? remaining : const Duration(minutes: 1);
+    _reminderSweepTimer = Timer(wait, _loadData);
   }
 
   // ── Exposed for HomeScreen's AppBar (grid/list toggle + archive icon

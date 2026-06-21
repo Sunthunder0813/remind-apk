@@ -126,6 +126,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
   Timer? _periodicSaveTimer;
   bool _isPopping = false;
 
+  // Live self-clear: if this screen is left open and the wall clock ticks
+  // past _reminderAt while the user is still looking at it, the pill/bell
+  // disappears without needing to leave and reopen the note. The
+  // notification itself fires independently via NotificationService —
+  // this timer only clears the note's own in-memory/persisted field.
+  Timer? _reminderExpiryTimer;
+
   // Subscription to the global checklistUpdateStream (main.dart) — fed by
   // a raw isolate-to-isolate message the widget's background callback
   // sends via IsolateNameServer the moment a toggle is applied. This is
@@ -197,6 +204,29 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
       // something to undo back to.
       _undoStack.add(_EditSnapshot(_titleController.text, _contentController.text));
     }
+
+    _scheduleReminderExpiryCheck();
+  }
+
+  // Re-arms itself after every check (rather than a fixed Timer.periodic)
+  // so the wait shrinks to exactly "time left until the reminder" instead
+  // of polling at a fixed interval that's either too slow (pill lingers
+  // after the time passes) or wastefully frequent for far-future times.
+  void _scheduleReminderExpiryCheck() {
+    _reminderExpiryTimer?.cancel();
+    if (widget.readOnly || _reminderAt == null) return;
+
+    final remaining = _reminderAt!.difference(DateTime.now());
+    if (remaining.isNegative) {
+      setState(() => _reminderAt = null);
+      _scheduleAutoSave();
+      return;
+    }
+    // Cap the wait at 1 minute so a far-future reminder doesn't schedule
+    // one giant Timer — re-checks at most once a minute, or sooner if
+    // the reminder is closer than that.
+    final wait = remaining < const Duration(minutes: 1) ? remaining : const Duration(minutes: 1);
+    _reminderExpiryTimer = Timer(wait, _scheduleReminderExpiryCheck);
   }
 
   @override
@@ -206,6 +236,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
     _autoSaveTimer?.cancel();
     _periodicSaveTimer?.cancel();
     _historyDebounceTimer?.cancel();
+    _reminderExpiryTimer?.cancel();
     _titleController.dispose();
     _contentController.dispose();
     _contentFocusNode.dispose();
@@ -562,6 +593,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
     setState(() {
       _reminderAt = DateTime(date!.year, date.month, date.day, time.hour, time.minute);
     });
+    _scheduleReminderExpiryCheck();
   }
 
   void _applySuggestedReminder() {
@@ -570,6 +602,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
       _reminderAt = _suggestedReminder;
       _suggestedReminder = null;
     });
+    _scheduleReminderExpiryCheck();
   }
 
   String _formatDateTime(DateTime dt) {
@@ -723,7 +756,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
                         label: _formatDateTime(_reminderAt!),
                         color: colorScheme.primary,
                         onChange: _pickReminder,
-                        onClear: () => setState(() => _reminderAt = null),
+                        onClear: () {
+                          setState(() => _reminderAt = null);
+                          _reminderExpiryTimer?.cancel();
+                        },
                       ),
               ),
 

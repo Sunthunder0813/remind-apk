@@ -88,8 +88,26 @@ class DatabaseService {
   // Returns all notes as a list, newest first
   List<Note> getAllNotes() {
     final notes = _notesBox.values.toList();
+    _sweepExpiredReminders(notes);
     notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return notes;
+  }
+
+  // Clears reminderAt on any note whose scheduled time has already
+  // passed, so the editor's reminder pill/bell stops showing it as
+  // "set" once it's done. This never touches the actual notification —
+  // NotificationService fires that independently at the scheduled time
+  // via the OS scheduler, regardless of what this note object's
+  // reminderAt field says afterward. Only writes back to Hive for notes
+  // that actually changed, so this is a no-op cost on every other read.
+  void _sweepExpiredReminders(List<Note> notes) {
+    final now = DateTime.now();
+    for (final note in notes) {
+      if (note.reminderAt != null && note.reminderAt!.isBefore(now)) {
+        note.reminderAt = null;
+        _notesBox.put(note.id, note);
+      }
+    }
   }
 
   // Forces a fresh read of the entire notes box from disk, bypassing this
@@ -139,7 +157,9 @@ class DatabaseService {
   }
 
   Note? getNoteById(String id) {
-    return _notesBox.get(id);
+    final note = _notesBox.get(id);
+    if (note != null) _sweepExpiredReminders([note]);
+    return note;
   }
 
   // Forces a fresh read from disk, bypassing this isolate's in-memory box
@@ -153,7 +173,9 @@ class DatabaseService {
     return _runExclusiveOnNotesBox(() async {
       await _notesBox.close();
       _notesBox = await Hive.openBox<Note>(_notesBoxName);
-      return _notesBox.get(id);
+      final note = _notesBox.get(id);
+      if (note != null) _sweepExpiredReminders([note]);
+      return note;
     });
   }
 
