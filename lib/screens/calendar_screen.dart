@@ -29,7 +29,15 @@ class CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _loadNotes() async {
-    final notes = await DatabaseService.instance.getAllNotesFresh();
+    // Plain getAllNotes() — no box close/reopen needed here. Within this
+    // (main) isolate, _notesBox already reflects every write made via
+    // DatabaseService, so there's no staleness to fix; the close/reopen
+    // "fresh" read only matters for picking up a write made by a
+    // DIFFERENT isolate (the home screen widget's background callback).
+    // Calling getAllNotesFresh() here — on every tab switch/build — used
+    // to close the box other in-flight saves/deletes were using, which is
+    // what was causing notes to silently fail to save or delete.
+    final notes = DatabaseService.instance.getAllNotes();
     if (!mounted) return;
     setState(() {
       _notesWithReminders = notes

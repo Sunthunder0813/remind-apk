@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:hive_flutter/hive_flutter.dart';
@@ -22,6 +23,28 @@ class DatabaseService {
   late Box<Note> _notesBox;
   late Box<Category> _categoriesBox;
   late Box<SavedAnime> _savedAnimeBox;
+
+  // Serializes every operation that touches _notesBox's open/closed state
+  // (save, delete, and the cross-isolate-fresh reopen). Without this, a
+  // fresh-read close()+reopen() racing against an in-flight put()/delete()
+  // on the SAME (now-closed) Box object threw "Box has already been
+  // closed" — silently swallowed by callers' try/catch blocks, making
+  // saves and deletes appear to just silently do nothing. Each call now
+  // queues behind whatever notesBox operation is already running instead
+  // of overlapping with it.
+  Future<void> _notesBoxLock = Future.value();
+
+  Future<T> _runExclusiveOnNotesBox<T>(Future<T> Function() action) async {
+    final previous = _notesBoxLock;
+    final completer = Completer<void>();
+    _notesBoxLock = completer.future;
+    await previous;
+    try {
+      return await action();
+    } finally {
+      completer.complete();
+    }
+  }
 
   // Guards against double-init — the widget's background callback runs
   // in its own isolate and calls init() fresh every time it wakes, since
@@ -73,23 +96,46 @@ class DatabaseService {
   // isolate's cached Hive values. Needed when the widget background isolate
   // writes a checklist toggle and the main app needs to reflect it instantly.
   Future<List<Note>> getAllNotesFresh() async {
-    await _notesBox.close();
-    _notesBox = await Hive.openBox<Note>(_notesBoxName);
-    final notes = _notesBox.values.toList();
-    notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return notes;
+    return _runExclusiveOnNotesBox(() async {
+      await _notesBox.close();
+      _notesBox = await Hive.openBox<Note>(_notesBoxName);
+      final notes = _notesBox.values.toList();
+      notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return notes;
+    });
+  }
+
+  // Forces _notesBox to be reopened from disk, unconditionally. Always
+  // called at the very start of the widget's background callback
+  // (widgetBackgroundCallback in widget_service.dart) — that isolate can
+  // be REUSED by Android for multiple consecutive widget taps instead of
+  // spawned fresh every time. init()'s `_initialized` guard means a
+  // reused isolate would otherwise keep using whatever Box snapshot it
+  // opened on its very first wake, silently missing any note
+  // created/edited from the main app isolate since then. Without this, a
+  // checkbox tap on note B's row can save a notes list that's missing
+  // note A entirely, overwriting the widget's previously-correct rows.
+  Future<void> refreshNotesBoxFromDisk() async {
+    await _runExclusiveOnNotesBox(() async {
+      await _notesBox.close();
+      _notesBox = await Hive.openBox<Note>(_notesBoxName);
+    });
   }
 
   // Saves a new note (key = note's id so we can look it up later)
   Future<void> saveNote(Note note) async {
-    await _notesBox.put(note.id, note);
-    await WidgetService.refreshWidget(getAllNotes());
+    await _runExclusiveOnNotesBox(() async {
+      await _notesBox.put(note.id, note);
+      await WidgetService.refreshWidget(getAllNotes());
+    });
   }
 
   // Deletes a note by its id
   Future<void> deleteNote(String id) async {
-    await _notesBox.delete(id);
-    await WidgetService.refreshWidget(getAllNotes());
+    await _runExclusiveOnNotesBox(() async {
+      await _notesBox.delete(id);
+      await WidgetService.refreshWidget(getAllNotes());
+    });
   }
 
   Note? getNoteById(String id) {
@@ -104,9 +150,11 @@ class DatabaseService {
   // returning stale data forever. Closing + reopening forces Hive to
   // re-read the file, which is the only way to cross that gap.
   Future<Note?> getNoteByIdFresh(String id) async {
-    await _notesBox.close();
-    _notesBox = await Hive.openBox<Note>(_notesBoxName);
-    return _notesBox.get(id);
+    return _runExclusiveOnNotesBox(() async {
+      await _notesBox.close();
+      _notesBox = await Hive.openBox<Note>(_notesBoxName);
+      return _notesBox.get(id);
+    });
   }
 
   // Live stream of changes to one specific note's Hive entry — fires on

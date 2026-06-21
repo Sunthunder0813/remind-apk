@@ -25,6 +25,7 @@ class TodoRemoteViewsFactory(
         val itemId: String? = null,
         val title: String? = null,
         val time: String? = null,
+        val taskCount: String? = null,
         val text: String? = null,
         val done: Boolean = false
     )
@@ -59,6 +60,7 @@ class TodoRemoteViewsFactory(
                         itemId = if (obj.has("itemId") && !obj.isNull("itemId")) obj.getString("itemId") else null,
                         title = if (obj.has("title") && !obj.isNull("title")) obj.getString("title") else null,
                         time = if (obj.has("time") && !obj.isNull("time")) obj.getString("time") else null,
+                        taskCount = if (obj.has("taskCount") && !obj.isNull("taskCount")) obj.getString("taskCount") else null,
                         text = if (obj.has("text") && !obj.isNull("text")) obj.getString("text") else null,
                         done = if (obj.has("done") && !obj.isNull("done")) obj.getBoolean("done") else false
                     )
@@ -83,6 +85,11 @@ class TodoRemoteViewsFactory(
                 views.setViewVisibility(
                     R.id.note_time,
                     if (row.time.isNullOrEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+                )
+                views.setTextViewText(R.id.note_count_badge, row.taskCount ?: "")
+                views.setViewVisibility(
+                    R.id.note_count_badge,
+                    if (row.taskCount.isNullOrEmpty()) android.view.View.GONE else android.view.View.VISIBLE
                 )
                 views
             }

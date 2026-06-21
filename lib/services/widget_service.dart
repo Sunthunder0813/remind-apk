@@ -46,6 +46,12 @@ class WidgetService {
     for (var index = 0; index < todayNotes.length; index++) {
       final note = todayNotes[index];
       final groupDate = note.reminderAt ?? note.calendarDate;
+      final totalCount = note.checklistItems.length;
+      final doneCount = note.checklistItems.where((i) => i.done).length;
+      final taskCount = totalCount == 0
+          ? null
+          : (doneCount == totalCount ? 'Completed' : '$doneCount/$totalCount');
+
       rows.add({
         'type': 'header',
         'noteId': note.id,
@@ -53,6 +59,7 @@ class WidgetService {
         'time': groupDate != null && note.reminderAt != null
             ? _formatWidgetTime(groupDate)
             : null,
+        'taskCount': taskCount,
       });
 
       if (note.checklistItems.isNotEmpty) {
@@ -175,6 +182,12 @@ Future<void> widgetBackgroundCallback(Uri? uri) async {
   debugPrint('[TodoToggle] widgetBackgroundCallback woke up, uri=$uri');
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseService.instance.init();
+  // Unconditional re-read from disk — see refreshNotesBoxFromDisk's doc
+  // comment. init() alone isn't enough here because this isolate may be
+  // a REUSED one from an earlier tap, in which case init() no-ops and
+  // this isolate would otherwise keep acting on a stale, earlier-opened
+  // Box snapshot that doesn't know about notes created/edited since.
+  await DatabaseService.instance.refreshNotesBoxFromDisk();
   await WidgetService.applyPendingToggle();
   debugPrint('[TodoToggle] widgetBackgroundCallback finished');
 }

@@ -1655,7 +1655,13 @@ class _ReflowingLayoutState extends State<_ReflowingLayout> {
   final Map<String, double> _measuredGridHeights = {};
 
   void _onMeasured(String key, double height) {
-    final rounded = height.roundToDouble();
+    // Safety cushion above the raw measured height — on cold start
+    // specifically, the off-screen measuring pass can run before text/font
+    // metrics are fully settled, undershooting the real on-screen paint by
+    // a noticeable margin (observed up to ~17px) until the next re-measure
+    // corrects it. A generous fixed buffer absorbs that gap without
+    // needing pixel-perfect parity between the two passes.
+    final rounded = (height + 24).roundToDouble();
     if (_measuredGridHeights[key] == rounded) return;
     setState(() => _measuredGridHeights[key] = rounded);
   }

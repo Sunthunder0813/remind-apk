@@ -9,13 +9,6 @@
     android:paddingStart="2dp"
     android:paddingEnd="2dp">
 
-    <ImageView
-        android:layout_width="14dp"
-        android:layout_height="14dp"
-        android:layout_marginEnd="8dp"
-        android:src="@android:drawable/ic_menu_today"
-        android:tint="#F2D6FF" />
-
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -43,5 +36,18 @@
             android:ellipsize="end" />
 
     </LinearLayout>
+
+    <!-- "3/5" progress badge, or "Completed" once doneCount == totalCount.
+         Sits at the trailing end of the header row, vertically centered
+         against the title/time block beside it. -->
+    <TextView
+        android:id="@+id/note_count_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:textColor="#E3A2EE"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:maxLines="1" />
 
 </LinearLayout>
