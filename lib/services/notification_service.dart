@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 class NotificationService {
   NotificationService._();
@@ -23,12 +24,25 @@ class NotificationService {
   Future<void> init() async {
     tz_data.initializeTimeZones();
 
-    // ✅ FIX #2: Actually set the device's local timezone.
-    // Without this, tz.local is UTC and all scheduled times are wrong.
-    final offset = DateTime.now().timeZoneOffset;
-    final hours = offset.inHours;
-    final timeZoneName = hours == 8 ? 'Asia/Manila' : 'UTC';
-    tz.setLocalLocation(tz.getLocation(timeZoneName));
+    // Reads the device's REAL IANA timezone name (e.g. "Asia/Manila",
+    // "America/New_York") instead of guessing from the raw UTC offset —
+    // the old offset-based guess only worked by coincidence for devices
+    // exactly at UTC+8, and silently fell back to UTC for every other
+    // device/timezone, which is why notifications didn't fire correctly
+    // on a different phone.
+    String timeZoneName;
+    try {
+      timeZoneName = await FlutterTimezone.getLocalTimezone();
+    } catch (e) {
+      debugPrint('[NotificationService] Failed to read device timezone, falling back to UTC: $e');
+      timeZoneName = 'UTC';
+    }
+    try {
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      debugPrint('[NotificationService] Unknown timezone "$timeZoneName", falling back to UTC: $e');
+      tz.setLocalLocation(tz.getLocation('UTC'));
+    }
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');

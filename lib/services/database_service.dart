@@ -140,9 +140,19 @@ class DatabaseService {
     });
   }
 
+  // Tracks ids that were explicitly deleted, so a stale write (e.g. an
+  // editor screen's autosave timer firing AFTER the user already
+  // swipe-deleted that same note from the list) can't resurrect it.
+  final Set<String> _deletedNoteIds = {};
+
   // Saves a new note (key = note's id so we can look it up later)
   Future<void> saveNote(Note note) async {
     await _runExclusiveOnNotesBox(() async {
+      if (_deletedNoteIds.contains(note.id)) {
+        // This id was deleted after this save was queued — drop the
+        // write instead of resurrecting the note.
+        return;
+      }
       await _notesBox.put(note.id, note);
       await WidgetService.refreshWidget(getAllNotes());
     });
@@ -151,6 +161,7 @@ class DatabaseService {
   // Deletes a note by its id
   Future<void> deleteNote(String id) async {
     await _runExclusiveOnNotesBox(() async {
+      _deletedNoteIds.add(id);
       await _notesBox.delete(id);
       await WidgetService.refreshWidget(getAllNotes());
     });

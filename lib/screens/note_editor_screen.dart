@@ -310,6 +310,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
   // doesn't navigate away. Only fires once we have at least a title or
   // body, so we never litter Hive with empty draft notes.
   Future<void> _autoSave() async {
+    if (!mounted) return;
     if (!_hasUnsavedChanges) return;
     if (_titleController.text.trim().isEmpty &&
         _contentController.text.trim().isEmpty &&

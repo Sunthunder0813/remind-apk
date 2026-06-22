@@ -310,7 +310,7 @@ class CalendarScreenState extends State<CalendarScreen> {
                         child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
                       ),
                       confirmDismiss: (_) async {
-                        _swipeDeleteNote(note);
+                        await _swipeDeleteNote(note);
                         return true;
                       },
                       child: Card(

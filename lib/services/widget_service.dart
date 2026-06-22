@@ -134,7 +134,10 @@ class WidgetService {
     if (noteId == null) return;
 
     final note = DatabaseService.instance.getNoteById(noteId);
-    if (note == null) return;
+    if (note == null) {
+      debugPrint('[TodoToggle] note $noteId no longer exists — skipping (likely deleted)');
+      return;
+    }
 
     if (itemId == null) {
       note.isCompleted = !note.isCompleted;
@@ -161,6 +164,17 @@ class WidgetService {
           else
             items[i],
       ];
+    }
+
+    // Re-check the note still exists right before writing — closes the
+    // race where this note was deleted (e.g. swiped away on the Calendar
+    // tab) WHILE this background isolate was already mid-flight between
+    // its read above and this write. Without this, a stale toggle signal
+    // can resurrect a note the user already deleted.
+    final stillExists = DatabaseService.instance.getNoteById(noteId) != null;
+    if (!stillExists) {
+      debugPrint('[TodoToggle] note $noteId was deleted mid-toggle — discarding stale write');
+      return;
     }
 
     await DatabaseService.instance.saveNote(note);

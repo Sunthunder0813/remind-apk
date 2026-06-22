@@ -4,22 +4,21 @@ $ErrorActionPreference = "Continue"
 
 $repo        = "Sunthunder0813/remind-apk"
 $tag         = "latest"
-$apkSrc      = "build\app\outputs\flutter-apk\app-arm64-v8a-release.apk"
+$apkSrc      = "build\app\outputs\flutter-apk\app-release.apk"
 $assetName   = "app-release.apk"
 $downloadUrl = "https://github.com/$repo/releases/download/$tag/$assetName"
 
 # ── 1. Build ────────────────────────────────────────────────────────────────
-Write-Host "==> Building release APK (ARM64 only)..." -ForegroundColor Cyan
-flutter build apk --release --target-platform android-arm64 --split-per-abi
+Write-Host "==> Building full release APK (all ABIs)..." -ForegroundColor Cyan
+flutter build apk --release
 
 if (-not (Test-Path $apkSrc)) {
     Write-Host "ERROR: APK not found at $apkSrc — build may have failed." -ForegroundColor Red
     exit 1
 }
 
-# ── 2. Copy to a fixed filename so the upload name is always correct ─────────
-$apkFixed = "build\app\outputs\flutter-apk\$assetName"
-Copy-Item $apkSrc $apkFixed -Force
+# ── 2. (No copy needed — $apkSrc already matches the target asset name) ──────
+$apkFixed = $apkSrc
 
 # ── 3. Check whether the release tag already exists ─────────────────────────
 Write-Host "==> Checking if '$tag' release exists..." -ForegroundColor Cyan
