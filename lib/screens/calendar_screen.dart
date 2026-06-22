@@ -95,7 +95,7 @@ class CalendarScreenState extends State<CalendarScreen> {
   }
 
   List<Note> _notesForDay(DateTime day) {
-    return _notesWithReminders.where((note) {
+    final notes = _notesWithReminders.where((note) {
       // Calendar-created notes group by calendarDate (works even with no
       // reminder time set). Anything else (shouldn't normally reach this
       // list, but kept as a fallback) groups by reminderAt's date.
@@ -105,6 +105,14 @@ class CalendarScreenState extends State<CalendarScreen> {
           groupDate.month == day.month &&
           groupDate.day == day.day;
     }).toList();
+    // Stable order regardless of editing — _notesWithReminders comes from
+    // getAllNotes(), which sorts by updatedAt descending. That means just
+    // opening a note (which autosaves and bumps updatedAt) would shoot it
+    // to the top of this day's list. createdAt never changes from
+    // editing, so sorting by it here keeps notes from jumping around
+    // every time one of them is opened/saved.
+    notes.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return notes;
   }
 
   List<Note> _eventLoader(DateTime day) => _notesForDay(day);
@@ -157,13 +165,22 @@ class CalendarScreenState extends State<CalendarScreen> {
   // NotesScreen's _swipeDeleteNote, minus the archive direction and the
   // background-image cleanup (calendar reminders don't carry themes).
   Future<void> _swipeDeleteNote(Note note) async {
-    setState(() => _notesWithReminders.removeWhere((n) => n.id == note.id));
-
+    debugPrint('[CalendarSwipeDelete] Starting delete for note: id=${note.id} title="${note.title}"');
+    // Dismissible has already animated this row off-screen and removed
+    // it from the tree by the time onDismissed fires — so the Hive
+    // work below no longer races against the slide animation the way it
+    // did when confirmDismiss returned false and _loadNotes() rebuilt the
+    // list mid-swipe (that's what caused the visible recoil/lag).
     await NotificationService.instance.cancelNoteReminder(note.id);
+    debugPrint('[CalendarSwipeDelete] Notification cancelled for note: ${note.id}');
     await DatabaseService.instance.deleteNote(note.id);
+    debugPrint('[CalendarSwipeDelete] Hive delete done for note: ${note.id}');
+    _loadNotes();
+    debugPrint('[CalendarSwipeDelete] UI reloaded after delete');
 
     if (!mounted) return;
     showUndoToast(context, '"${note.title}" deleted', onUndo: () async {
+      DatabaseService.instance.undeleteNote(note.id);
       await DatabaseService.instance.saveNote(note);
       if (note.reminderAt != null && note.reminderAt!.isAfter(DateTime.now())) {
         await NotificationService.instance.scheduleNoteReminder(
@@ -298,21 +315,20 @@ class CalendarScreenState extends State<CalendarScreen> {
                       key: ValueKey('calendar_note_${note.id}'),
                       direction: DismissDirection.endToStart,
                       background: Container(
-                        alignment: Alignment.centerRight,
-                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF8A80), Color(0xFFE53935)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFFFF5A5F),
+                      alignment: Alignment.centerRight,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 22),
+                        child: Icon(
+                          Icons.delete_rounded,
+                          color: Colors.white,
+                          size: 24,
                         ),
-                        child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
                       ),
-                      confirmDismiss: (_) async {
-                        await _swipeDeleteNote(note);
-                        return true;
-                      },
+                    ),
+
+                      confirmDismiss: (_) async => true,
+                      onDismissed: (_) => _swipeDeleteNote(note),
                       child: Card(
                         margin: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),

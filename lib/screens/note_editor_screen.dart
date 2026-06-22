@@ -312,6 +312,16 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
   Future<void> _autoSave() async {
     if (!mounted) return;
     if (!_hasUnsavedChanges) return;
+    // Guard: if this note was already deleted (e.g. swiped away from
+    // the list while the editor's timers were still running), don't
+    // resurrect it via a stale auto-save.
+    final currentId = _isEditing
+        ? widget.note!.id
+        : _persistedNoteId;
+    if (currentId != null &&
+        DatabaseService.instance.getNoteById(currentId) == null) {
+      return;
+    }
     if (_titleController.text.trim().isEmpty &&
         _contentController.text.trim().isEmpty &&
         _checklistItems.isEmpty) {
@@ -516,6 +526,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
     // it) already covers their work, so don't let them fire again after
     // we've already written/popped.
     _autoSaveTimer?.cancel();
+_periodicSaveTimer?.cancel();
 
     try {
     final rawTitle = _titleController.text.trim();

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' hide Category;
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/note.dart';
 import '../models/category.dart';
@@ -147,24 +148,37 @@ class DatabaseService {
 
   // Saves a new note (key = note's id so we can look it up later)
   Future<void> saveNote(Note note) async {
+    debugPrint('[DatabaseService] saveNote called for id=${note.id} title="${note.title}"');
     await _runExclusiveOnNotesBox(() async {
       if (_deletedNoteIds.contains(note.id)) {
-        // This id was deleted after this save was queued — drop the
-        // write instead of resurrecting the note.
+        debugPrint('[DatabaseService] saveNote BLOCKED — id=${note.id} is in _deletedNoteIds (resurrection prevented)');
         return;
       }
       await _notesBox.put(note.id, note);
+      debugPrint('[DatabaseService] saveNote written to Hive: id=${note.id}');
       await WidgetService.refreshWidget(getAllNotes());
     });
   }
 
   // Deletes a note by its id
   Future<void> deleteNote(String id) async {
+    debugPrint('[DatabaseService] deleteNote called for id=$id');
+    _deletedNoteIds.add(id); // Guard immediately, before acquiring the lock
+    debugPrint('[DatabaseService] _deletedNoteIds now: $_deletedNoteIds');
     await _runExclusiveOnNotesBox(() async {
-      _deletedNoteIds.add(id);
       await _notesBox.delete(id);
+      debugPrint('[DatabaseService] _notesBox.delete() done for id=$id');
+      debugPrint('[DatabaseService] Note still in box after delete? ${_notesBox.containsKey(id)}');
       await WidgetService.refreshWidget(getAllNotes());
     });
+    debugPrint('[DatabaseService] deleteNote fully complete for id=$id');
+  }
+
+  // Clears a previously-deleted id from the guard set, so an Undo
+  // operation (which calls saveNote again for the same id) is allowed
+  // through. Must be called BEFORE saveNote in any Undo flow.
+  void undeleteNote(String id) {
+    _deletedNoteIds.remove(id);
   }
 
   Note? getNoteById(String id) {

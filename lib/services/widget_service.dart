@@ -31,6 +31,7 @@ class WidgetService {
   // home_widget's SharedPreferences store.
   static Future<void> refreshWidget(List<Note> allNotes) async {
     final now = DateTime.now();
+    
     final todayNotes = allNotes.where((n) {
       if (n.isCalendarReminder != true) return false;
       final groupDate = n.calendarDate ?? n.reminderAt;
@@ -38,7 +39,12 @@ class WidgetService {
           groupDate.year == now.year &&
           groupDate.month == now.month &&
           groupDate.day == now.day;
-    }).toList();
+    }).toList()
+      // allNotes (from getAllNotes()) is sorted by updatedAt descending,
+      // which would otherwise make a note jump to the top of the widget
+      // the instant it's opened/autosaved. createdAt is stable across
+      // edits, keeping widget row order matching the Calendar tab's.
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     debugPrint('[WidgetRefresh] allNotes count: ${allNotes.length}');
     debugPrint('[WidgetRefresh] todayNotes ids: ${todayNotes.map((n) => n.id).toList()}');
 

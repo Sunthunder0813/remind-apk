@@ -780,13 +780,18 @@ class NotesScreenState extends State<NotesScreen> {
   // Swiping a note: delete immediately from Hive. Undo restores it by
   // saving the same note object straight back — no waiting timer needed.
   Future<void> _swipeDeleteNote(Note note) async {
-    setState(() => _notes.removeWhere((n) => n.id == note.id));
-
+    debugPrint('[SwipeDelete] Starting delete for note: id=${note.id} title="${note.title}"');
     await NotificationService.instance.cancelNoteReminder(note.id);
+    debugPrint('[SwipeDelete] Notification cancelled for note: ${note.id}');
     await DatabaseService.instance.deleteNote(note.id);
+    debugPrint('[SwipeDelete] Hive delete done for note: ${note.id}');
+    debugPrint('[SwipeDelete] _deletedNoteIds guard should now contain: ${note.id}');
+    _loadData();
+    debugPrint('[SwipeDelete] UI reloaded after delete');
 
     if (!mounted) return;
     showUndoToast(context, '"${note.title}" deleted', onUndo: () async {
+      DatabaseService.instance.undeleteNote(note.id);
       await DatabaseService.instance.saveNote(note);
       if (note.reminderAt != null && note.reminderAt!.isAfter(DateTime.now())) {
         await NotificationService.instance.scheduleNoteReminder(
@@ -923,12 +928,11 @@ class NotesScreenState extends State<NotesScreen> {
     final children = _categories.where((c) => c.parentId == folder.id).toList();
     final noteCount = _notes.where((n) => n.categoryId == folder.id).length;
 
-    setState(() => _categories.removeWhere((c) => c.id == folder.id));
-
     for (final child in children) {
       await DatabaseService.instance.deleteCategory(child.id);
     }
     await DatabaseService.instance.deleteCategory(folder.id);
+    _loadData();
 
     final extra = [
       if (children.isNotEmpty) '${children.length} subfolder(s)',
@@ -1028,82 +1032,44 @@ class NotesScreenState extends State<NotesScreen> {
 
   // ── Shared swipe-to-delete/archive backgrounds ──────────────────────────
 
-  // Shared layout for both swipe-reveal backgrounds — a soft circular icon
-  // badge next to a label. Only vertical margin is applied (matching the
-  // gap between cards); horizontal margin is intentionally omitted so the
-  // color fills flush against the card with no gap revealing the plain
-  // Dismissible background underneath as you swipe. Only the outward
-  // corners are rounded — the edge that meets the card stays square so it
-  // reads as one continuous surface sliding apart, not two separate boxes.
+  // Plain square-corner fill, no margin at all — fills the Dismissible's
+  // full rect exactly, matching the card's own height/width with zero
+  // gap. The card sliding on top provides the only rounding the user
+  // sees; the background just needs to be a flat, complete fill.
   Widget _swipeActionBackground({
-    required Alignment alignment,
-    required List<Color> gradientColors,
+    required bool isLeft,
+    required Color color,
     required IconData icon,
-    required String label,
   }) {
-    final isLeftAligned = alignment == Alignment.centerLeft;
     return Container(
-      alignment: alignment,
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: isLeftAligned ? Alignment.centerLeft : Alignment.centerRight,
-          end: isLeftAligned ? Alignment.centerRight : Alignment.centerLeft,
-          colors: gradientColors,
+      color: color,
+      alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 22),
+        child: Icon(
+          icon,
+          color: Colors.white,
+          size: 24,
         ),
-        borderRadius: BorderRadius.horizontal(
-          left: Radius.circular(isLeftAligned ? 16 : 0),
-          right: Radius.circular(isLeftAligned ? 0 : 16),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        textDirection: isLeftAligned ? TextDirection.ltr : TextDirection.rtl,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.22),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.white, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 13.5,
-            ),
-          ),
-        ],
       ),
     );
   }
 
   Widget _deleteBackground() {
-    return _swipeActionBackground(
-      alignment: Alignment.centerRight,
-      gradientColors: const [Color(0xFFFF8A80), Color(0xFFE53935)],
-      icon: Icons.delete_outline_rounded,
-      label: 'Delete',
-    );
-  }
+  return _swipeActionBackground(
+    isLeft: false,
+    color: const Color(0xFFFF5A5F),
+    icon: Icons.delete_rounded,
+  );
+}
 
   Widget _archiveBackground() {
-    return _swipeActionBackground(
-      alignment: Alignment.centerLeft,
-      gradientColors: [
-        Theme.of(context).colorScheme.primary.withOpacity(0.8),
-        Theme.of(context).colorScheme.primary,
-      ],
-      icon: Icons.archive_outlined,
-      label: 'Archive',
-    );
-  }
+  return _swipeActionBackground(
+    isLeft: true,
+    color: const Color(0xFF7C3AED),
+    icon: Icons.archive_rounded,
+  );
+}
 
   // ── Tile builders ────────────────────────────────────────────────────────
 
@@ -1119,13 +1085,22 @@ class NotesScreenState extends State<NotesScreen> {
       confirmDismiss: (direction) async {
         if (_isEditMode) return false;
         if (direction == DismissDirection.startToEnd) {
-          _swipeArchiveFolder(folder);
+          unawaited(_swipeArchiveFolder(folder));
+          return true;
         } else {
-          _swipeDeleteFolder(folder);
+          // Same reasoning as the note tile above — let the slide-away
+          // animation complete on its own; the actual delete fires from
+          // onDismissed once the tile's already out of the tree.
+          return true;
         }
-        return true;
+      },
+      onDismissed: (direction) {
+        if (direction == DismissDirection.endToStart) {
+          unawaited(_swipeDeleteFolder(folder));
+        }
       },
       child: Stack(
+        fit: StackFit.expand,
         children: [
           Material(
             color: const Color(0xFF3C3541),
@@ -1223,13 +1198,24 @@ class NotesScreenState extends State<NotesScreen> {
       confirmDismiss: (direction) async {
         if (_isEditMode) return false;
         if (direction == DismissDirection.startToEnd) {
-          _swipeArchiveNote(note);
+          unawaited(_swipeArchiveNote(note));
+          return true;
         } else {
-          _swipeDeleteNote(note);
+          // Let Dismissible finish its own slide-away animation instead
+          // of snapping back — the actual Hive delete now happens in
+          // onDismissed, after the tile is already gone from the tree,
+          // so it no longer races against _ReflowingLayout's masonry
+          // reflow animation triggered by _loadData().
+          return true;
         }
-        return true;
+      },
+      onDismissed: (direction) {
+        if (direction == DismissDirection.endToStart) {
+          unawaited(_swipeDeleteNote(note));
+        }
       },
       child: Stack(
+        fit: StackFit.expand,
         children: [
           Material(
             color: cardColor,
@@ -1399,58 +1385,7 @@ class NotesScreenState extends State<NotesScreen> {
     ];
   }
 
-  // Rough content-driven height estimate per item, in the SAME order as
-  // _buildItems — folders are always one short row; notes grow with
-  // however many checklist lines or how much free text they're showing.
-  // This isn't pixel-perfect (real text wrap depends on font metrics we
-  // don't have without a full layout pass), but it's close enough to stop
-  // list-mode cards from clipping/overflowing the way a single flat
-  // constant did.
-  List<double> _estimateHeights(List<Category> subfolders, List<Note> notesHere) {
-    const folderHeight = 72.0;
-
-    // Matches the real Padding(all: 14) + title row + timestamp row used
-    // inside _buildNoteCard, piece by piece, rather than one guessed
-    // constant — the previous flat estimate kept undercounting because it
-    // didn't separately account for top/bottom card padding AND the
-    // timestamp line AND the checklist's own internal spacing.
-    const cardPaddingTopBottom = 28.0; // padding: all(14) → 14 + 14
-    const titleRowHeight = 24.0; // title text line, allowing 2-line wrap headroom
-    const spacingBeforeBody = 8.0; // SizedBox(height: 8) before checklist/text
-    const spacingBeforeTimestamp = 10.0; // SizedBox(height: 10)
-    const timestampHeight = 16.0; // "Jun 19 at 11:13 PM" line
-    const checklistRowHeight = 24.0; // icon+text row (~18) + bottom padding (3) + buffer
-    const freeTextLineHeight = 19.0;
-    const safetyBuffer = 10.0; // small cushion against font/wrap variance
-
-    double baseHeight(int extraLines) =>
-        cardPaddingTopBottom +
-        titleRowHeight +
-        spacingBeforeBody +
-        spacingBeforeTimestamp +
-        timestampHeight +
-        safetyBuffer;
-
-    final heights = <double>[];
-    for (final _ in subfolders) {
-      heights.add(folderHeight);
-    }
-    for (final note in notesHere) {
-      final checklist = _parseChecklistPreview(note);
-      final freeText = _freeTextPreview(note);
-      double height = baseHeight(0);
-      if (checklist.isNotEmpty) {
-        final rows = checklist.take(4).length;
-        height += checklistRowHeight * rows;
-        if (checklist.length > 4) height += 18; // "+N more" line
-      } else if (freeText.isNotEmpty) {
-        final estimatedLines = (freeText.length / 28).ceil().clamp(1, 4);
-        height += freeTextLineHeight * estimatedLines;
-      }
-      heights.add(height);
-    }
-    return heights;
-  }
+  
 
   @override
   Widget build(BuildContext context) {
@@ -1484,7 +1419,6 @@ class NotesScreenState extends State<NotesScreen> {
                   isGridView: _isGridView,
                   bottomPadding: _isEditMode ? 96 : 96,
                   items: _buildItems(subfolders, notesHere),
-                  estimatedHeights: _estimateHeights(subfolders, notesHere),
                 ),
         ),
         if (_isEditMode)
@@ -1581,9 +1515,17 @@ class _MeasureSizeState extends State<_MeasureSize> {
         widget.onMeasured(box.size.height);
       }
     });
+    // IntrinsicHeight reports the child's own natural/finite height
+    // regardless of what fit (e.g. StackFit.expand) the child's inner
+    // Stack uses — it queries getMaxIntrinsicHeight rather than passing
+    // through loose/unbounded constraints, so this measuring pass never
+    // sees "infinite height" even though the real layout later stretches
+    // the same card to fill its slot via StackFit.expand.
     return SizedBox(
       width: widget.width,
-      child: KeyedSubtree(key: _key, child: widget.child),
+      child: IntrinsicHeight(
+        child: KeyedSubtree(key: _key, child: widget.child),
+      ),
     );
   }
 }
@@ -1667,16 +1609,11 @@ class _ReflowingLayout extends StatefulWidget {
   final bool isGridView;
   final double bottomPadding;
   final List<MapEntry<String, WidgetBuilder>> items;
-  // One estimated height per item (same order as `items`) — only used for
-  // LIST mode now, where a single column makes a height guess reasonably
-  // safe. Grid mode uses real measured heights instead (see below).
-  final List<double> estimatedHeights;
 
   const _ReflowingLayout({
     required this.isGridView,
     required this.bottomPadding,
     required this.items,
-    required this.estimatedHeights,
   });
 
   @override
@@ -1684,11 +1621,20 @@ class _ReflowingLayout extends StatefulWidget {
 }
 
 class _ReflowingLayoutState extends State<_ReflowingLayout> {
-  // Real measured heights for grid mode, keyed by item id — populated by
-  // _MeasureSize after each card actually renders once at the grid column
-  // width. Until a given item's real height is known, it falls back to a
-  // safe default so layout doesn't jump wildly on first paint.
-  final Map<String, double> _measuredGridHeights = {};
+  // Real measured heights, keyed by "<mode>_<itemId>" — populated by
+  // _MeasureSize after each card actually renders once at the relevant
+  // width (grid column width OR full list width). Keying by mode too
+  // means switching between grid/list doesn't reuse a height measured at
+  // the WRONG width while a fresh measurement is still in flight. Until a
+  // given item's real height at the current mode is known, it falls back
+  // to a safe default so layout doesn't jump wildly on first paint.
+  //
+  // This is also what makes swipe-to-delete/archive backgrounds match the
+  // card exactly: the background fills the Dismissible's bounds, and
+  // those bounds now come from this real measurement instead of the old
+  // _estimateHeights() guess — so the colored reveal is never a different
+  // size than the card sliding away from it.
+  final Map<String, double> _measuredHeights = {};
 
   void _onMeasured(String key, double height) {
     // Safety cushion above the raw measured height — on cold start
@@ -1697,9 +1643,9 @@ class _ReflowingLayoutState extends State<_ReflowingLayout> {
     // a noticeable margin (observed up to ~17px) until the next re-measure
     // corrects it. A generous fixed buffer absorbs that gap without
     // needing pixel-perfect parity between the two passes.
-    final rounded = (height + 24).roundToDouble();
-    if (_measuredGridHeights[key] == rounded) return;
-    setState(() => _measuredGridHeights[key] = rounded);
+    final rounded = height.roundToDouble();
+    if (_measuredHeights[key] == rounded) return;
+    setState(() => _measuredHeights[key] = rounded);
   }
 
   @override
@@ -1717,6 +1663,8 @@ class _ReflowingLayoutState extends State<_ReflowingLayout> {
         final colWidth = (usableWidth - gridSpacing) / 2;
 
         final rects = <Rect>[];
+        final measureWidth = widget.isGridView ? colWidth : usableWidth;
+        final modePrefix = widget.isGridView ? 'grid' : 'list';
 
         if (widget.isGridView) {
           // True masonry packing: each item's real measured height (once
@@ -1724,8 +1672,8 @@ class _ReflowingLayoutState extends State<_ReflowingLayout> {
           // placement, same idea as Keep/Pinterest, no fixed guess.
           final colHeights = [topPadding, topPadding];
           for (var i = 0; i < widget.items.length; i++) {
-            final key = widget.items[i].key;
-            final height = _measuredGridHeights[key] ?? defaultGridHeight;
+            final key = '${modePrefix}_${widget.items[i].key}';
+            final height = _measuredHeights[key] ?? defaultGridHeight;
             final col = colHeights[0] <= colHeights[1] ? 0 : 1;
             final x = horizontalPadding + col * (colWidth + gridSpacing);
             final y = colHeights[col];
@@ -1733,9 +1681,14 @@ class _ReflowingLayoutState extends State<_ReflowingLayout> {
             colHeights[col] = y + height + gridSpacing;
           }
         } else {
+          // List mode now also uses real measured height instead of the
+          // old _estimateHeights() guess — this is what makes the swipe
+          // delete/archive background automatically match the card's
+          // true size, with no manual height math to keep in sync.
           var runningY = topPadding;
           for (var i = 0; i < widget.items.length; i++) {
-            final height = widget.estimatedHeights[i];
+            final key = '${modePrefix}_${widget.items[i].key}';
+            final height = _measuredHeights[key] ?? defaultGridHeight;
             rects.add(Rect.fromLTWH(horizontalPadding, runningY, usableWidth, height));
             runningY += height + listSpacing;
           }
@@ -1766,9 +1719,9 @@ class _ReflowingLayoutState extends State<_ReflowingLayout> {
                         for (final item in widget.items)
                           RepaintBoundary(
                             child: _MeasureSize(
-                              key: ValueKey('measure_${item.key}'),
-                              width: colWidth,
-                              onMeasured: (h) => _onMeasured(item.key, h),
+                              key: ValueKey('measure_${modePrefix}_${item.key}'),
+                              width: measureWidth,
+                              onMeasured: (h) => _onMeasured('${modePrefix}_${item.key}', h),
                               child: Builder(builder: item.value),
                             ),
                           ),
