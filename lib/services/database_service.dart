@@ -148,7 +148,8 @@ class DatabaseService {
 
   // Saves a new note (key = note's id so we can look it up later)
   Future<void> saveNote(Note note) async {
-    debugPrint('[DatabaseService] saveNote called for id=${note.id} title="${note.title}"');
+    debugPrint('[DatabaseService] saveNote called for id=${note.id} title="${note.title}" — deletedIds at call time: $_deletedNoteIds');
+    bool didSave = false;
     await _runExclusiveOnNotesBox(() async {
       if (_deletedNoteIds.contains(note.id)) {
         debugPrint('[DatabaseService] saveNote BLOCKED — id=${note.id} is in _deletedNoteIds (resurrection prevented)');
@@ -156,22 +157,29 @@ class DatabaseService {
       }
       await _notesBox.put(note.id, note);
       debugPrint('[DatabaseService] saveNote written to Hive: id=${note.id}');
-      await WidgetService.refreshWidget(getAllNotes());
+      didSave = true;
     });
+    // Refresh widget AFTER the lock releases so getAllNotes() reads the
+    // fully committed box state — calling it inside the lock meant it
+    // could read a stale snapshot before the delete had fully landed.
+    if (didSave) {
+      await WidgetService.refreshWidget(getAllNotes());
+    }
   }
 
   // Deletes a note by its id
   Future<void> deleteNote(String id) async {
     debugPrint('[DatabaseService] deleteNote called for id=$id');
-    _deletedNoteIds.add(id); // Guard immediately, before acquiring the lock
+    _deletedNoteIds.add(id);
     debugPrint('[DatabaseService] _deletedNoteIds now: $_deletedNoteIds');
     await _runExclusiveOnNotesBox(() async {
       await _notesBox.delete(id);
       debugPrint('[DatabaseService] _notesBox.delete() done for id=$id');
       debugPrint('[DatabaseService] Note still in box after delete? ${_notesBox.containsKey(id)}');
-      await WidgetService.refreshWidget(getAllNotes());
     });
     debugPrint('[DatabaseService] deleteNote fully complete for id=$id');
+    // Refresh widget after lock releases so it reads the post-delete state.
+    await WidgetService.refreshWidget(getAllNotes());
   }
 
   // Clears a previously-deleted id from the guard set, so an Undo
@@ -180,6 +188,11 @@ class DatabaseService {
   void undeleteNote(String id) {
     _deletedNoteIds.remove(id);
   }
+
+  // Synchronous check — lets callers (e.g. the editor's _autoSave timer)
+  // bail out early without acquiring the notesBox lock, avoiding a
+  // resurrection race where the periodic save fires after a swipe-delete.
+  bool isNoteDeleted(String id) => _deletedNoteIds.contains(id);
 
   Note? getNoteById(String id) {
     final note = _notesBox.get(id);

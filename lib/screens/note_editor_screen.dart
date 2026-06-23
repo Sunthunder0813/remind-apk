@@ -314,10 +314,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
     if (!_hasUnsavedChanges) return;
     // Guard: if this note was already deleted (e.g. swiped away from
     // the list while the editor's timers were still running), don't
-    // resurrect it via a stale auto-save.
+    // resurrect it via a stale auto-save. Check _deletedNoteIds first
+    // (synchronous, no lock needed) before falling back to a Hive read.
     final currentId = _isEditing
         ? widget.note!.id
         : _persistedNoteId;
+    if (currentId != null &&
+        DatabaseService.instance.isNoteDeleted(currentId)) {
+      return;
+    }
     if (currentId != null &&
         DatabaseService.instance.getNoteById(currentId) == null) {
       return;
@@ -520,13 +525,22 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
       if (popOnSave && mounted) Navigator.pop(context, true);
       return;
     }
+
+    // If this note was already deleted from outside (swipe-delete while
+    // editor was open), bail out before writing anything to Hive.
+    final currentId = _isEditing ? widget.note!.id : _persistedNoteId;
+    if (currentId != null && DatabaseService.instance.isNoteDeleted(currentId)) {
+      if (popOnSave && mounted) Navigator.pop(context, true);
+      return;
+    }
+
     _isSaving = true;
 
     // Cancel any pending auto-save timers — this save (whatever triggered
     // it) already covers their work, so don't let them fire again after
     // we've already written/popped.
     _autoSaveTimer?.cancel();
-_periodicSaveTimer?.cancel();
+    _periodicSaveTimer?.cancel();
 
     try {
     final rawTitle = _titleController.text.trim();
@@ -651,8 +665,15 @@ _periodicSaveTimer?.cancel();
         // Back button/gesture: flush any pending edits straight to Hive
         // (same save the debounce/periodic timers already use) without
         // requiring a Done tap first, then actually leave the screen.
+        // Skip if this note was already deleted (e.g. swipe-deleted from
+        // the list while this screen was open in the back stack).
         if (!widget.readOnly) {
-          await _saveNote(popOnSave: false);
+          final currentId = _isEditing ? widget.note!.id : _persistedNoteId;
+          final alreadyDeleted = currentId != null &&
+              DatabaseService.instance.isNoteDeleted(currentId);
+          if (!alreadyDeleted) {
+            await _saveNote(popOnSave: false);
+          }
         }
         if (mounted) Navigator.pop(context, true);
       },

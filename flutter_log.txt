@@ -1,0 +1,186 @@
+Launching lib\main.dart on TB310FU in debug mode...
+Running Gradle task 'assembleDebug'...                          
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): flutter_timezone, home_widget
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+
+Please check the changelogs of these plugins and upgrade to a version that supports Built-in Kotlin.
+If no such version exists, report the issue to the plugin. If necessary, here is a guide on filing 
+an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
+
+If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
+Running Gradle task 'assembleDebug'...                             73.3s
+ΓêÜ Built build\app\outputs\flutter-apk\app-debug.apk
+Installing build\app\outputs\flutter-apk\app-debug.apk...           3.5s
+I/FlutterActivityAndFragmentDelegate(28132): If you are attempting to set --enable-dart-profiling via Intent extras to launch a Flutter component outside of using the Flutter CLI, note that support for setting engine flags on Android via Intent will soon be dropped; see https://github.com/flutter/flutter/issues/180686 for more information on this breaking change. To migrate, set --enable-dart-profiling or any other flags specified via Intent extras on the command line instead or see https://github.com/flutter/flutter/blob/main/docs/engine/Flutter-Android-Engine-Flags.md for alternative methods.
+D/FlutterJNI(28132): Beginning load of flutter...
+D/FlutterJNI(28132): flutter (null) was loaded normally!
+I/flutter (28132): [IMPORTANT:flutter/shell/platform/android/android_context_vk_impeller.cc(62)] Using the Impeller rendering backend (Vulkan).
+D/FlutterRenderer(28132): Width is zero. 0,0
+D/FlutterRenderer(28132): Width is zero. 0,0
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+I/.example.remind(28132): Compiler allocated 5032KB to compile void android.view.ViewRootImpl.performTraversals()
+I/flutter (28132): Notification permission granted: true
+I/flutter (28132): [WidgetRefresh] allNotes count: 2
+I/flutter (28132): [WidgetRefresh] todayNotes ids: []
+I/flutter (28132): [WidgetRefresh] FINAL rows being written (0 total): []
+Syncing files to device TB310FU...                                 112ms
+
+Flutter run key commands.
+r Hot reload. 
+R Hot restart.
+h List all available interactive commands.
+d Detach (terminate "flutter run" but leave application running).
+c Clear the screen
+q Quit (terminate the application on the device).
+
+A Dart VM Service on TB310FU is available at: http://127.0.0.1:54813/XVwNhZ6mcNo=/
+The Flutter DevTools debugger and profiler on TB310FU is available at: http://127.0.0.1:54813/XVwNhZ6mcNo=/devtools/?uri=ws://127.0.0.1:54813/XVwNhZ6mcNo=/ws
+W/libc    (28132): Access denied finding property "persist.vendor.debug.gpud.enable"
+I/gralloc4(28132): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+D/BLASTBufferQueue(28132): [SurfaceView[com.example.remind/com.example.remind.MainActivity]#1](f:0,a:1) acquireNextBufferLocked size=800x1308 mFrameNumber=1 applyTransaction=true mTimestamp=124006758777696(auto) mPendingTransactions.size=0 graphicBufferId=120826019971082 transform=0
+I/Choreographer(28132): Skipped 179 frames!  The application may be doing too much work on its main thread.
+I/gralloc4(28132): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+I/gralloc4(28132): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+I/mali    (28132): [DebugProp] GPU Debug-Mechanism Disable !
+D/BLASTBufferQueue(28132): [VRI[MainActivity]#0](f:0,a:1) acquireNextBufferLocked size=800x1340 mFrameNumber=1 applyTransaction=true mTimestamp=124007285605158(auto) mPendingTransactions.size=0 graphicBufferId=120826019971087 transform=0
+W/Parcel  (28132): Expecting binder but got null!
+I/gralloc4(28132): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+D/DecorView(28132): isCts, pkg: com.example.remind
+I/gralloc4(28132): @set_metadata: update dataspace from GM (0x08010000 -> 0x00000000)
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/ProfileInstaller(28132): Installing profile for com.example.remind
+W/OnBackInvokedCallback(28132): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback(28132): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InputMethodManager(28132): showSoftInput() view=io.flutter.embedding.android.FlutterView{cd6778e VFE...... .F....ID 0,0-800,1308 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+D/InputMethodManager(28132): showSoftInput() view=io.flutter.embedding.android.FlutterView{cd6778e VFE...... .F....ID 0,0-800,1308 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+I/AssistStructure(28132): Flattened final assist data: 444 bytes, containing 1 windows, 3 views
+D/InputConnectionAdaptor(28132): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback(28132): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback(28132): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InsetsController(28132): show(ime(), fromIme=true)
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/InsetsController(28132): show(ime(), fromIme=true)
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+I/flutter (28132): [DatabaseService] saveNote called for id=1782184153257 title="Test" ΓÇö deletedIds at call time: {}
+I/flutter (28132): [DatabaseService] saveNote written to Hive: id=1782184153257
+I/flutter (28132): [WidgetRefresh] allNotes count: 3
+I/flutter (28132): [WidgetRefresh] todayNotes ids: []
+I/flutter (28132): [WidgetRefresh] FINAL rows being written (0 total): []
+I/flutter (28132): [DatabaseService] saveNote called for id=1782184153257 title="Test" ΓÇö deletedIds at call time: {}
+I/flutter (28132): [DatabaseService] saveNote written to Hive: id=1782184153257
+I/flutter (28132): [WidgetRefresh] allNotes count: 3
+I/flutter (28132): [WidgetRefresh] todayNotes ids: []
+I/flutter (28132): [WidgetRefresh] FINAL rows being written (0 total): []
+D/InputConnectionAdaptor(28132): The input method toggled cursor monitoring off
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+W/OnBackInvokedCallback(28132): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback(28132): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InputMethodManager(28132): showSoftInput() view=io.flutter.embedding.android.FlutterView{cd6778e VFE...... .F...... 0,0-800,1308 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+D/InputMethodManager(28132): showSoftInput() view=io.flutter.embedding.android.FlutterView{cd6778e VFE...... .F...... 0,0-800,1308 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+I/AssistStructure(28132): Flattened final assist data: 448 bytes, containing 1 windows, 3 views
+D/InputConnectionAdaptor(28132): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback(28132): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback(28132): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InsetsController(28132): show(ime(), fromIme=true)
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/InsetsController(28132): show(ime(), fromIme=true)
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/InputConnectionAdaptor(28132): The input method toggled cursor monitoring off
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+W/OnBackInvokedCallback(28132): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback(28132): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+I/flutter (28132): [DatabaseService] saveNote called for id=1782184153257 title="Test" ΓÇö deletedIds at call time: {}
+I/flutter (28132): [DatabaseService] saveNote written to Hive: id=1782184153257
+I/flutter (28132): [WidgetRefresh] allNotes count: 3
+I/flutter (28132): [WidgetRefresh] todayNotes ids: []
+I/flutter (28132): [WidgetRefresh] FINAL rows being written (0 total): []
+
+ΓòÉΓòÉΓòí EXCEPTION CAUGHT BY RENDERING LIBRARY Γò₧ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+The following assertion was thrown during layout:
+A RenderFlex overflowed by 21 pixels on the bottom.
+
+The relevant error-causing widget was:
+  Column
+  Column:file:///C:/Users/Joseph%20Santander/Desktop/remind/lib/screens/notes_screen.dart:1259:34
+
+To inspect this widget in Flutter DevTools, visit:
+http://127.0.0.1:54813/XVwNhZ6mcNo=/devtools//#/inspector?uri=http%3A%2F%2F127.0.0.1%3A54813%2FXVwNhZ6mcNo%3D%2F&inspectorRef=inspector-0
+
+The overflowing RenderFlex has an orientation of Axis.vertical.
+The edge of the RenderFlex that is overflowing has been marked in the rendering with a yellow and
+black striped pattern. This is usually caused by the contents being too big for the RenderFlex.
+Consider applying a flex factor (e.g. using an Expanded widget) to force the children of the
+RenderFlex to fit within the available space instead of being sized to their natural size.
+This is considered an error condition because it indicates that there is content that cannot be
+seen. If the content is legitimately bigger than the available space, consider clipping it with a
+ClipRect widget before putting it in the flex, or using a scrollable container rather than a Flex,
+like a ListView.
+The specific RenderFlex in question is: RenderFlex#74811 relayoutBoundary=up1 OVERFLOWING:
+  creator: Column ΓåÉ Expanded ΓåÉ Row ΓåÉ Padding ΓåÉ Container ΓåÉ Listener ΓåÉ RawGestureDetector ΓåÉ
+    GestureDetector ΓåÉ Semantics ΓåÉ DefaultSelectionStyle ΓåÉ Builder ΓåÉ MouseRegion ΓåÉ Γï»
+  parentData: offset=Offset(32.0, 0.0); flex=1; fit=FlexFit.tight (can use size)
+  constraints: BoxConstraints(w=198.9, 0.0<=h<=25.0)
+  size: Size(198.9, 25.0)
+  direction: vertical
+  mainAxisAlignment: start
+  mainAxisSize: min
+  crossAxisAlignment: start
+  textDirection: ltr
+  verticalDirection: down
+  spacing: 0.0
+ΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñΓùóΓùñ
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+W/OnBackInvokedCallback(28132): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback(28132): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InputMethodManager(28132): showSoftInput() view=io.flutter.embedding.android.FlutterView{cd6778e VFE...... .F...... 0,0-800,1308 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+D/InputMethodManager(28132): showSoftInput() view=io.flutter.embedding.android.FlutterView{cd6778e VFE...... .F...... 0,0-800,1308 #1 aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+I/AssistStructure(28132): Flattened final assist data: 444 bytes, containing 1 windows, 3 views
+D/InputConnectionAdaptor(28132): The input method toggled cursor monitoring on
+W/OnBackInvokedCallback(28132): OnBackInvokedCallback is not enabled for the application.
+W/OnBackInvokedCallback(28132): Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+D/InsetsController(28132): show(ime(), fromIme=true)
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/InsetsController(28132): show(ime(), fromIme=true)
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+I/flutter (28132): [DatabaseService] saveNote called for id=1782184173206 title="Test" ΓÇö deletedIds at call time: {}
+I/flutter (28132): [DatabaseService] saveNote written to Hive: id=1782184173206
+I/flutter (28132): [WidgetRefresh] allNotes count: 4
+I/flutter (28132): [WidgetRefresh] todayNotes ids: [1782184173206]
+I/flutter (28132): [WidgetRefresh] FINAL rows being written (1 total): [header:Test]
+I/flutter (28132): [WidgetRefresh] allNotes count: 4
+I/flutter (28132): [WidgetRefresh] todayNotes ids: [1782184173206]
+I/flutter (28132): [WidgetRefresh] FINAL rows being written (1 total): [header:Test]
+D/InputConnectionAdaptor(28132): The input method toggled cursor monitoring off
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+D/FlutterJNI(28132): Sending viewport metrics to the engine.
+I/ScrollIdentify(28132): on fling
+I/flutter (28132): [CalendarSwipeDelete] Starting delete for note: id=1782184173206 title="Test"
+I/flutter (28132): [CalendarSwipeDelete] Notification cancelled for note: 1782184173206
+I/flutter (28132): [DatabaseService] deleteNote called for id=1782184173206
+I/flutter (28132): [DatabaseService] _deletedNoteIds now: {1782184173206}
+I/flutter (28132): [DatabaseService] _notesBox.delete() done for id=1782184173206
+I/flutter (28132): [DatabaseService] Note still in box after delete? false
+I/flutter (28132): [DatabaseService] deleteNote fully complete for id=1782184173206
+I/flutter (28132): [WidgetRefresh] allNotes count: 3
+I/flutter (28132): [WidgetRefresh] todayNotes ids: []
+I/flutter (28132): [WidgetRefresh] FINAL rows being written (0 total): []
+I/flutter (28132): [CalendarSwipeDelete] Hive delete done for note: 1782184173206
+I/ScrollIdentify(28132): on fling
+D/DecorView(28132): isCts, pkg: com.example.remind
+D/BLASTBufferQueue(28132): [SurfaceView[com.example.remind/com.example.remind.MainActivity]#1](f:0,a:1) destructor()
+D/BufferQueueConsumer(28132): [SurfaceView[com.example.remind/com.example.remind.MainActivity]#1(BLAST Consumer)1](id:6de400000001,api:0,p:-1,c:28132) disconnect
+D/BLASTBufferQueue(28132): [VRI[MainActivity]#0](f:0,a:1) destructor()
+D/BufferQueueConsumer(28132): [VRI[MainActivity]#0(BLAST Consumer)0](id:6de400000000,api:0,p:-1,c:28132) disconnect
+I/GED     (28132): ged_boost_gpu_freq, level 100, eOrigin 2, final_idx 29, oppidx_max 29, oppidx_min 0
+Lost connection to device.

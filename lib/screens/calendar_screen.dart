@@ -187,19 +187,13 @@ class CalendarScreenState extends State<CalendarScreen> {
   // background-image cleanup (calendar reminders don't carry themes).
   Future<void> _swipeDeleteNote(Note note) async {
     debugPrint('[CalendarSwipeDelete] Starting delete for note: id=${note.id} title="${note.title}"');
-    // Dismissible has already animated this row off-screen and removed
-    // it from the tree by the time onDismissed fires — so the Hive
-    // work below no longer races against the slide animation the way it
-    // did when confirmDismiss returned false and _loadNotes() rebuilt the
-    // list mid-swipe (that's what caused the visible recoil/lag).
-    await NotificationService.instance.cancelNoteReminder(note.id);
-    debugPrint('[CalendarSwipeDelete] Notification cancelled for note: ${note.id}');
-    await DatabaseService.instance.deleteNote(note.id);
-    debugPrint('[CalendarSwipeDelete] Hive delete done for note: ${note.id}');
-    _loadNotes();
-    debugPrint('[CalendarSwipeDelete] UI reloaded after delete');
-
     if (!mounted) return;
+
+    setState(() => _notesWithReminders.removeWhere((n) => n.id == note.id));
+
+    // Show toast immediately while context is still mounted — the awaits
+    // below are slow enough that context.mounted is false by the time they
+    // finish, causing the toast to silently no-op if called after them.
     showUndoToast(context, '"${note.title}" deleted', onUndo: () async {
       DatabaseService.instance.undeleteNote(note.id);
       await DatabaseService.instance.saveNote(note);
@@ -214,6 +208,11 @@ class CalendarScreenState extends State<CalendarScreen> {
       _loadNotes();
       WidgetService.refreshWidget(DatabaseService.instance.getAllNotes());
     });
+
+    await NotificationService.instance.cancelNoteReminder(note.id);
+    debugPrint('[CalendarSwipeDelete] Notification cancelled for note: ${note.id}');
+    await DatabaseService.instance.deleteNote(note.id);
+    debugPrint('[CalendarSwipeDelete] Hive delete done for note: ${note.id}');
   }
 
   String _formatTime(DateTime dt) {
