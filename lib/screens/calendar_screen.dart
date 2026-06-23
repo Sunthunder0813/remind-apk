@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:table_calendar/table_calendar.dart';
 import '../models/note.dart';
 import '../services/database_service.dart';
@@ -23,6 +24,22 @@ class CalendarScreenState extends State<CalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   List<Note> _notesWithReminders = [];
 
+  // Swipe-progress notifiers cached per note id — see NotesScreenState's
+  // identical pattern for why these can't be created fresh in itemBuilder.
+  final Map<String, ValueNotifier<double>> _swipeProgressNotifiers = {};
+
+  ValueNotifier<double> _swipeProgressFor(String id) {
+    return _swipeProgressNotifiers.putIfAbsent(id, () => ValueNotifier<double>(0.0));
+  }
+
+  void _pruneSwipeProgressNotifiers() {
+    final liveIds = {for (final n in _notesWithReminders) n.id};
+    final staleIds = _swipeProgressNotifiers.keys.where((k) => !liveIds.contains(k)).toList();
+    for (final id in staleIds) {
+      _swipeProgressNotifiers.remove(id)?.dispose();
+    }
+  }
+
   // Live self-clear for the alarm icon on this tab's day list: re-arms
   // for whichever currently-loaded reminder note's reminderAt is
   // soonest, so the icon disappears the moment that note's reminder
@@ -41,6 +58,9 @@ class CalendarScreenState extends State<CalendarScreen> {
   @override
   void dispose() {
     _reminderSweepTimer?.cancel();
+    for (final notifier in _swipeProgressNotifiers.values) {
+      notifier.dispose();
+    }
     super.dispose();
   }
 
@@ -60,6 +80,7 @@ class CalendarScreenState extends State<CalendarScreen> {
           .where((n) => n.isCalendarReminder == true)
           .toList();
     });
+    _pruneSwipeProgressNotifiers();
     _scheduleReminderSweep();
   }
 
@@ -311,27 +332,69 @@ class CalendarScreenState extends State<CalendarScreen> {
                   itemCount: selectedNotes.length,
                   itemBuilder: (_, index) {
                     final note = selectedNotes[index];
+                    final swipeProgress = _swipeProgressFor(note.id);
                     return Dismissible(
                       key: ValueKey('calendar_note_${note.id}'),
                       direction: DismissDirection.endToStart,
+                      onUpdate: (details) {
+                        swipeProgress.value = details.progress;
+                      },
                       background: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       color: const Color(0xFFFF5A5F),
                       alignment: Alignment.centerRight,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 22),
-                        child: Icon(
-                          Icons.delete_rounded,
-                          color: Colors.white,
-                          size: 24,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: ValueListenableBuilder<double>(
+                          valueListenable: swipeProgress,
+                          builder: (context, progress, child) {
+                            final t = (progress / 0.4).clamp(0.0, 1.0);
+                            return Opacity(
+                              opacity: t,
+                              child: Transform.scale(
+                                scale: 0.6 + (0.4 * t),
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.22),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.delete_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
 
                       confirmDismiss: (_) async => true,
                       onDismissed: (_) => _swipeDeleteNote(note),
-                      child: Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: swipeProgress,
+                        builder: (context, progress, child) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Material(
+                              color: const Color(0xFF2C2831),
+                              borderRadius: BorderRadius.only(
+                                topLeft: const Radius.circular(12),
+                                bottomLeft: const Radius.circular(12),
+                                topRight: Radius.circular(progress > 0 ? 0 : 12),
+                                bottomRight: Radius.circular(progress > 0 ? 0 : 12),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: child,
+                            ),
+                          );
+                        },
                         child: ListTile(
                           leading: GestureDetector(
                             onTap: () => _toggleCompleted(note),

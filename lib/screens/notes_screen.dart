@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../models/note.dart';
 import '../models/category.dart';
@@ -141,6 +142,47 @@ class NotesScreen extends StatefulWidget {
 class NotesScreenState extends State<NotesScreen> {
   List<Note> _notes = [];
   List<Category> _categories = [];
+
+  // Swipe-progress notifiers for the archive/delete icon-badge animation,
+  // cached per item id rather than created fresh in every build — a new
+  // ValueNotifier on every rebuild would leak (never disposed) and could
+  // desync from Dismissible's onUpdate if a rebuild ever lands mid-swipe.
+  final Map<String, ValueNotifier<double>> _swipeProgressNotifiers = {};
+
+  ValueNotifier<double> _swipeProgressFor(String id) {
+    return _swipeProgressNotifiers.putIfAbsent(id, () => ValueNotifier<double>(0.0));
+  }
+
+  // Tracks which way the card is currently being dragged, so the card's
+  // leading edge can go square exactly while it's overlapping the panel
+  // underneath — a rounded leading corner mid-swipe exposes a sliver of
+  // the page background behind the curve, since the corner itself isn't
+  // a flat line. Once the swipe is released/reset, this goes back to
+  // DismissDirection.none and the card returns to fully rounded.
+  final Map<String, ValueNotifier<DismissDirection>> _swipeDirectionNotifiers = {};
+
+  ValueNotifier<DismissDirection> _swipeDirectionFor(String id) {
+    return _swipeDirectionNotifiers.putIfAbsent(
+        id, () => ValueNotifier<DismissDirection>(DismissDirection.none));
+  }
+
+  // Drops notifiers for items that no longer exist, so deleted/archived
+  // notes and folders don't leak their ValueNotifier forever.
+  void _pruneSwipeProgressNotifiers() {
+    final liveIds = {
+      for (final n in _notes) 'note_${n.id}',
+      for (final c in _categories) 'folder_${c.id}',
+    };
+    final staleIds = _swipeProgressNotifiers.keys.where((k) => !liveIds.contains(k)).toList();
+    for (final id in staleIds) {
+      _swipeProgressNotifiers.remove(id)?.dispose();
+    }
+    final staleDirectionIds =
+        _swipeDirectionNotifiers.keys.where((k) => !liveIds.contains(k)).toList();
+    for (final id in staleDirectionIds) {
+      _swipeDirectionNotifiers.remove(id)?.dispose();
+    }
+  }
 
   String? _currentFolderId;
   final List<Category> _folderPath = [];
@@ -339,6 +381,12 @@ class NotesScreenState extends State<NotesScreen> {
   @override
   void dispose() {
     _reminderSweepTimer?.cancel();
+    for (final notifier in _swipeProgressNotifiers.values) {
+      notifier.dispose();
+    }
+    for (final notifier in _swipeDirectionNotifiers.values) {
+      notifier.dispose();
+    }
     super.dispose();
   }
 
@@ -347,6 +395,7 @@ class NotesScreenState extends State<NotesScreen> {
       _notes = DatabaseService.instance.getAllNotes();
       _categories = DatabaseService.instance.getAllCategories();
     });
+    _pruneSwipeProgressNotifiers();
     _scheduleReminderSweep();
   }
 
@@ -1032,42 +1081,78 @@ class NotesScreenState extends State<NotesScreen> {
 
   // ── Shared swipe-to-delete/archive backgrounds ──────────────────────────
 
-  // Plain square-corner fill, no margin at all — fills the Dismissible's
-  // full rect exactly, matching the card's own height/width with zero
-  // gap. The card sliding on top provides the only rounding the user
-  // sees; the background just needs to be a flat, complete fill.
+  // Rounded ONLY on the outer edge that's never covered by the card
+  // (left edge for archive, right edge for delete) — square on the edge
+  // the card overlaps, so the card visually slides on top of/over this
+  // panel rather than the two looking like separate adjacent pills with
+  // a seam between them. Same circular icon-badge treatment as before.
   Widget _swipeActionBackground({
     required bool isLeft,
     required Color color,
     required IconData icon,
+    required ValueListenable<double> progressListenable,
   }) {
     return Container(
-      color: color,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(isLeft ? 16 : 0),
+          bottomLeft: Radius.circular(isLeft ? 16 : 0),
+          topRight: Radius.circular(isLeft ? 0 : 16),
+          bottomRight: Radius.circular(isLeft ? 0 : 16),
+        ),
+      ),
       alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: ValueListenableBuilder<double>(
+          valueListenable: progressListenable,
+          builder: (context, progress, child) {
+            // Ramp 0→1 over the first 40% of swipe travel, then hold —
+            // avoids the badge looking sluggish on a fast/full swipe
+            // while still giving a visible grow-in on a slow drag.
+            final t = (progress / 0.4).clamp(0.0, 1.0);
+            return Opacity(
+              opacity: t,
+              child: Transform.scale(
+                scale: 0.6 + (0.4 * t),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.22),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    icon,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _deleteBackground() {
+  Widget _deleteBackground(ValueListenable<double> progress) {
   return _swipeActionBackground(
     isLeft: false,
     color: const Color(0xFFFF5A5F),
     icon: Icons.delete_rounded,
+    progressListenable: progress,
   );
 }
 
-  Widget _archiveBackground() {
+  Widget _archiveBackground(ValueListenable<double> progress) {
   return _swipeActionBackground(
     isLeft: true,
     color: const Color(0xFF7C3AED),
     icon: Icons.archive_rounded,
+    progressListenable: progress,
   );
 }
 
@@ -1077,11 +1162,17 @@ class NotesScreenState extends State<NotesScreen> {
     final subfolderCount = _categories.where((c) => c.parentId == folder.id).length;
     final noteCount = _notes.where((n) => n.categoryId == folder.id).length;
 
+    final progress = _swipeProgressFor('folder_${folder.id}');
+    final swipeDirection = _swipeDirectionFor('folder_${folder.id}');
     return Dismissible(
       key: ValueKey('folder_${folder.id}'),
       direction: DismissDirection.horizontal,
-      background: _archiveBackground(),
-      secondaryBackground: _deleteBackground(),
+      background: _archiveBackground(progress),
+      secondaryBackground: _deleteBackground(progress),
+      onUpdate: (details) {
+        progress.value = details.progress;
+        swipeDirection.value = details.progress > 0 ? details.direction : DismissDirection.none;
+      },
       confirmDismiss: (direction) async {
         if (_isEditMode) return false;
         if (direction == DismissDirection.startToEnd) {
@@ -1102,10 +1193,27 @@ class NotesScreenState extends State<NotesScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Material(
-            color: const Color(0xFF3C3541),
-            borderRadius: BorderRadius.circular(16),
-            clipBehavior: Clip.antiAlias,
+          ValueListenableBuilder<DismissDirection>(
+            valueListenable: swipeDirection,
+            builder: (context, direction, child) {
+              // Square the edge currently sliding toward/over the
+              // revealed panel; the trailing edge stays rounded as
+              // normal. DismissDirection.none (idle) keeps the card
+              // fully rounded, matching its normal at-rest appearance.
+              final squareLeft = direction == DismissDirection.startToEnd;
+              final squareRight = direction == DismissDirection.endToStart;
+              return Material(
+                color: const Color(0xFF3C3541),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(squareLeft ? 0 : 16),
+                  bottomLeft: Radius.circular(squareLeft ? 0 : 16),
+                  topRight: Radius.circular(squareRight ? 0 : 16),
+                  bottomRight: Radius.circular(squareRight ? 0 : 16),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: child,
+              );
+            },
             child: Ink(
               decoration: folder.backgroundImagePath != null
                   ? BoxDecoration(image: _backgroundDecorationImage(folder.backgroundImagePath!))
@@ -1190,11 +1298,17 @@ class NotesScreenState extends State<NotesScreen> {
     final checklist = _parseChecklistPreview(note);
     final freeText = _freeTextPreview(note);
 
+    final progress = _swipeProgressFor('note_${note.id}');
+    final swipeDirection = _swipeDirectionFor('note_${note.id}');
     return Dismissible(
       key: ValueKey('note_${note.id}'),
       direction: DismissDirection.horizontal,
-      background: _archiveBackground(),
-      secondaryBackground: _deleteBackground(),
+      background: _archiveBackground(progress),
+      secondaryBackground: _deleteBackground(progress),
+      onUpdate: (details) {
+        progress.value = details.progress;
+        swipeDirection.value = details.progress > 0 ? details.direction : DismissDirection.none;
+      },
       confirmDismiss: (direction) async {
         if (_isEditMode) return false;
         if (direction == DismissDirection.startToEnd) {
@@ -1217,10 +1331,23 @@ class NotesScreenState extends State<NotesScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Material(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(16),
-            clipBehavior: Clip.antiAlias,
+          ValueListenableBuilder<DismissDirection>(
+            valueListenable: swipeDirection,
+            builder: (context, direction, child) {
+              final squareLeft = direction == DismissDirection.startToEnd;
+              final squareRight = direction == DismissDirection.endToStart;
+              return Material(
+                color: cardColor,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(squareLeft ? 0 : 16),
+                  bottomLeft: Radius.circular(squareLeft ? 0 : 16),
+                  topRight: Radius.circular(squareRight ? 0 : 16),
+                  bottomRight: Radius.circular(squareRight ? 0 : 16),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: child,
+              );
+            },
             child: Ink(
               decoration: note.backgroundImagePath != null
                   ? BoxDecoration(image: _backgroundDecorationImage(note.backgroundImagePath!))
