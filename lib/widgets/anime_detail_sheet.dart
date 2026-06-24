@@ -44,28 +44,46 @@ class _AnimeDetailSheetState extends State<_AnimeDetailSheet> {
     _loadTrailer();
   }
 
-  void _preloadPlayer() {
-    debugPrint('[Trailer] _preloadPlayer called. trailerKey=$_trailerKey existingController=${_ytController != null}');
-    if (_trailerKey == null || _ytController != null) {
-      debugPrint('[Trailer] _preloadPlayer bailed early.');
+  // Builds the controller only once the user taps "Watch Trailer". Starts
+  // unmuted immediately, since this is a direct user-gesture response —
+  // the most reliable way to get the WebView to allow sound right away.
+  void _showTrailer() {
+    debugPrint('[Trailer] _showTrailer TAPPED. trailerKey=$_trailerKey');
+    if (_trailerKey == null) {
+      debugPrint('[Trailer] _showTrailer bailed: no trailerKey.');
       return;
     }
-    _ytController = ypf.YoutubePlayerController.fromVideoId(
-      videoId: _trailerKey!,
-      autoPlay: false,
-      params: const ypf.YoutubePlayerParams(
-        mute: true,
-        showControls: false,
-        showFullscreenButton: false,
-        strictRelatedVideos: true,
-        playsInline: true,
-        loop: true,
-      ),
-    );
-    _ytController!.listen((value) {
-      debugPrint('[Trailer] controller state update: playerState=${value.playerState} error=${value.error}');
-    });
-    debugPrint('[Trailer] _preloadPlayer created controller: $_ytController');
+    if (_ytController == null) {
+      _ytController = ypf.YoutubePlayerController.fromVideoId(
+        videoId: _trailerKey!,
+        autoPlay: true,
+        params: const ypf.YoutubePlayerParams(
+          mute: false,
+          showControls: false,
+          showFullscreenButton: false,
+          strictRelatedVideos: true,
+          playsInline: true,
+          loop: true,
+          enableJavaScript: true,
+        ),
+      );
+      _ytController!.listen((value) {
+        debugPrint('[Trailer] controller state update: playerState=${value.playerState} error=${value.error}');
+      });
+      debugPrint('[Trailer] _showTrailer: created controller $_ytController');
+    } else {
+      // Already built once before (e.g. user closed and reopened) — just
+      // resume playback with sound.
+      _ytController!.unMute();
+      _ytController!.playVideo();
+    }
+    setState(() => _trailerVisible = true);
+  }
+
+  void _hideTrailer() {
+    debugPrint('[Trailer] _hideTrailer TAPPED.');
+    _ytController?.pauseVideo();
+    setState(() => _trailerVisible = false);
   }
 
   @override
@@ -90,76 +108,6 @@ class _AnimeDetailSheetState extends State<_AnimeDetailSheet> {
       _trailerKey = key;
       _trailerLoading = false;
     });
-    // Preload WebView in background so it's ready when user taps
-    _preloadPlayer();
-  }
-
-  void _showTrailer() {
-    debugPrint('[Trailer] _showTrailer TAPPED. trailerKey=$_trailerKey controller=${_ytController != null} visible=$_trailerVisible');
-    if (_trailerKey == null) {
-      debugPrint('[Trailer] _showTrailer bailed: no trailerKey.');
-      return;
-    }
-    setState(() => _trailerVisible = true);
-    debugPrint('[Trailer] _showTrailer: set _trailerVisible=true');
-    if (_ytController != null) {
-      // Give the widget tree a frame to actually mount the now-visible
-      // YoutubePlayerScaffold before sending playback commands into the
-      // WebView — sending them in the same frame can be dropped if the
-      // IFrame player isn't considered "ready" yet after being preloaded
-      // offscreen.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          debugPrint('[Trailer] _showTrailer: postFrameCallback skipped, unmounted.');
-          return;
-        }
-        debugPrint('[Trailer] _showTrailer: postFrameCallback firing unMute+playVideo now');
-        _ytController!.unMute();
-        _ytController!.playVideo();
-      });
-    } else {
-      debugPrint('[Trailer] _showTrailer: NO controller exists yet — player will never build!');
-    }
-  }
-
-  void _createPlayer() {
-    debugPrint('[Trailer] _createPlayer called. mounted=$mounted trailerKey=$_trailerKey');
-    if (!mounted || _trailerKey == null) {
-      debugPrint('[Trailer] _createPlayer bailed early.');
-      return;
-    }
-    final controller = ypf.YoutubePlayerController.fromVideoId(
-      videoId: _trailerKey!,
-      autoPlay: true,
-      params: const ypf.YoutubePlayerParams(
-        mute: false,
-        showControls: false,
-        showFullscreenButton: false,
-        strictRelatedVideos: true,
-        playsInline: true,
-        loop: true,
-      ),
-    );
-    _ytController = controller;
-    debugPrint('[Trailer] _createPlayer: new controller built: $controller');
-    if (mounted) setState(() => _trailerVisible = true);
-    Future.delayed(const Duration(seconds: 32), () {
-      if (!mounted || !_trailerVisible || _ytController != controller) {
-        debugPrint('[Trailer] 32s refresh timer: conditions not met, skipping recreate.');
-        return;
-      }
-      debugPrint('[Trailer] 32s refresh timer: recreating controller.');
-      _ytController?.close();
-      _ytController = null;
-      _createPlayer();
-    });
-  }
-
-  void _hideTrailer() {
-    debugPrint('[Trailer] _hideTrailer TAPPED.');
-    _ytController?.pauseVideo();
-    setState(() => _trailerVisible = false);
-    // Don't close — keep preloaded for next open
   }
 
   Future<void> _launch(String url) async {
