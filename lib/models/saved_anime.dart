@@ -56,6 +56,9 @@ class SavedAnime extends HiveObject {
   @HiveField(10, defaultValue: null)
   String? remarks;
 
+  @HiveField(11, defaultValue: false)
+  bool isMovie;
+
   SavedAnime({
     required this.uniqueKey,
     required this.source,
@@ -68,6 +71,7 @@ class SavedAnime extends HiveObject {
     required this.listType,
     required this.savedAt,
     this.remarks,
+    this.isMovie = false,
   });
 
   // Converts back to the plain Anime model the rest of the app (Discover,
@@ -81,6 +85,7 @@ class SavedAnime extends HiveObject {
       score: score,
       genres: genres,
       source: source == HiveAnimeSource.jikan ? AnimeSource.jikan : AnimeSource.anilist,
+      isMovie: isMovie,
     );
   }
 
@@ -100,6 +105,7 @@ class SavedAnime extends HiveObject {
       listType: listType,
       savedAt: DateTime.now(),
       remarks: remarks,
+      isMovie: anime.isMovie,
     );
   }
 }

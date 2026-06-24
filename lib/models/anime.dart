@@ -8,6 +8,7 @@ class Anime {
   final String synopsis;
   final double? score;
   final List<String> genres;
+  final bool isMovie;
 
   Anime({
     required this.malId,
@@ -17,6 +18,7 @@ class Anime {
     this.score,
     this.genres = const [],
     this.source = AnimeSource.jikan,
+    this.isMovie = false,
   });
 
   String get uniqueKey => '${source.name}_$malId';
@@ -74,6 +76,7 @@ class Anime {
       'synopsis': synopsis,
       'score': score,
       'genres': genres,
+      'isMovie': isMovie,
     };
   }
 }

@@ -129,14 +129,24 @@ void _showAnimeDetailDialog(BuildContext context, Anime anime) {
 // persisted list, reached via the center FAB) or remove it from Liked
 // entirely.
 class LikedAnimeScreen extends StatefulWidget {
-  const LikedAnimeScreen({super.key});
+  final String sourceFilter;
+  final String? selectedGenre;
+  final ValueChanged<String> onSourceChanged;
+  final ValueChanged<String?> onGenreChanged;
+
+  const LikedAnimeScreen({
+    super.key,
+    required this.sourceFilter,
+    required this.selectedGenre,
+    required this.onSourceChanged,
+    required this.onGenreChanged,
+  });
 
   @override
   State<LikedAnimeScreen> createState() => _LikedAnimeScreenState();
 }
 
 class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
-  String? _selectedGenre; // null = "All"
 
   List<String> _allGenres(List<Anime> liked) {
     final set = <String>{};
@@ -152,10 +162,18 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
   }
 
   List<Anime> _filtered(List<Anime> liked) {
-    if (_selectedGenre == null) return liked;
     return liked.where((a) {
-      if (_selectedGenre == 'Other') return a.genres.isEmpty;
-      return a.genres.contains(_selectedGenre);
+      final matchesSource = widget.sourceFilter == 'All'
+          ? true
+          : widget.sourceFilter == 'Movie'
+              ? a.isMovie
+              : !a.isMovie;
+      final matchesGenre = widget.selectedGenre == null
+          ? true
+          : widget.selectedGenre == 'Other'
+              ? a.genres.isEmpty
+              : a.genres.contains(widget.selectedGenre);
+      return matchesSource && matchesGenre;
     }).toList();
   }
 
@@ -295,11 +313,11 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
             padding: const EdgeInsets.only(right: 8),
             child: ChoiceChip(
               label: const Text('All'),
-              selected: _selectedGenre == null,
-              onSelected: (_) => setState(() => _selectedGenre = null),
+              selected: widget.selectedGenre == null,
+              onSelected: (_) => widget.onGenreChanged(null),
               selectedColor: colorScheme.primary,
               labelStyle: TextStyle(
-                color: _selectedGenre == null ? Colors.white : Colors.black87,
+                color: widget.selectedGenre == null ? Colors.white : Colors.black87,
                 fontSize: 13,
               ),
             ),
@@ -309,13 +327,13 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
                 label: Text(genre),
-                selected: _selectedGenre == genre,
-                onSelected: (_) => setState(
-                  () => _selectedGenre = _selectedGenre == genre ? null : genre,
+                selected: widget.selectedGenre == genre,
+                onSelected: (_) => widget.onGenreChanged(
+                  widget.selectedGenre == genre ? null : genre,
                 ),
                 selectedColor: colorScheme.primary,
                 labelStyle: TextStyle(
-                  color: _selectedGenre == genre ? Colors.white : Colors.black87,
+                  color: widget.selectedGenre == genre ? Colors.white : Colors.black87,
                   fontSize: 13,
                 ),
               ),
@@ -343,12 +361,12 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
                 Icon(Icons.favorite_border, size: 64, color: Colors.grey.shade400),
                 const SizedBox(height: 16),
                 Text(
-                  'No liked anime yet',
+                  'No liked items yet',
                   style: TextStyle(fontSize: 18, color: Colors.grey.shade500),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Swipe right on Discover to like one',
+                  'Swipe right on Discover to save anime or movies',
                   style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                 ),
               ],
@@ -356,8 +374,8 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
           );
         }
 
-        final genres = _allGenres(liked);
         final filtered = _filtered(liked);
+        final genres = _allGenres(filtered);
 
         return Column(
           children: [
@@ -365,12 +383,11 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Text(
-                      '${liked.length} liked anime',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                  Text(
+                    '${liked.length} liked',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
+                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.tune),
                     tooltip: 'Layout settings',

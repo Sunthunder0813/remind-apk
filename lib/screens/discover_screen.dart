@@ -4,6 +4,7 @@ import '../models/anime.dart';
 import '../models/anime_genre.dart';
 import '../services/anime_api_service.dart';
 import '../services/anilist_api_service.dart';
+import '../services/tmdb_api_service.dart';
 import '../services/anime_like_service.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -29,6 +30,10 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
   // Session-only list of all left-swiped (passed) anime.
 // Lives in memory only — clears when the app is killed.
   final List<Anime> _passedHistory = [];
+
+  // Toggle between Anime and Movie mode.
+  bool isMovieMode = false;
+  int _tmdbPage = 1;
 
   // Genre filter state — multi-select now, so a Set of genre ids rather
   // than a single nullable genre.
@@ -120,6 +125,7 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
     // top-ranked titles, in the exact same order.
     _jikanPage = 1 + _random.nextInt(5);
     _anilistPage = 1 + _random.nextInt(5);
+    _tmdbPage = 1 + _random.nextInt(10);
 
     _loadGenres();
     _loadMoreAnime();
@@ -158,22 +164,68 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
     _scheduleCoachAutoDismiss();
   }
 
+  // Static TMDB genre list — TMDB genre IDs never change, so there's no
+  // need to fetch them; we map them the same way TmdbApiService does.
+  static const List<Map<String, dynamic>> _tmdbGenreData = [
+    {'malId': 28,    'name': 'Action'},
+    {'malId': 12,    'name': 'Adventure'},
+    {'malId': 16,    'name': 'Animation'},
+    {'malId': 35,    'name': 'Comedy'},
+    {'malId': 80,    'name': 'Crime'},
+    {'malId': 99,    'name': 'Documentary'},
+    {'malId': 18,    'name': 'Drama'},
+    {'malId': 10751, 'name': 'Family'},
+    {'malId': 14,    'name': 'Fantasy'},
+    {'malId': 36,    'name': 'History'},
+    {'malId': 27,    'name': 'Horror'},
+    {'malId': 10402, 'name': 'Music'},
+    {'malId': 9648,  'name': 'Mystery'},
+    {'malId': 10749, 'name': 'Romance'},
+    {'malId': 878,   'name': 'Sci-Fi'},
+    {'malId': 53,    'name': 'Thriller'},
+    {'malId': 10752, 'name': 'War'},
+    {'malId': 37,    'name': 'Western'},
+  ];
+
+  // Anime genres fetched from Jikan; TMDB genres are static above.
+  List<AnimeGenre> _animeGenres = [];
+  List<AnimeGenre> _movieGenres = [];
+
+  // Whichever genre list is active for the current mode.
+  List<AnimeGenre> get _activeGenres => isMovieMode ? _movieGenres : _animeGenres;
+
   Future<void> _loadGenres() async {
+    // Movie genres are static — build them immediately, no fetch needed.
+    _movieGenres = _tmdbGenreData
+        .map((g) => AnimeGenre(malId: g['malId'] as int, name: g['name'] as String))
+        .toList();
+
     try {
       final genres = await AnimeApiService.instance.fetchGenres();
-      setState(() {
-        _genres = genres;
-        _genresLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _animeGenres = genres;
+          _genres = isMovieMode ? _movieGenres : _animeGenres;
+          _genresLoading = false;
+        });
+      }
     } catch (_) {
-      setState(() => _genresLoading = false);
+      if (mounted) {
+        setState(() {
+          _genres = isMovieMode ? _movieGenres : _animeGenres;
+          _genresLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _loadMoreAnime() async {
+    if (isMovieMode) {
+      await _loadMoreMovies();
+      return;
+    }
+
     final wasEmpty = _deck.isEmpty;
-    // Snapshot the filter this request is for, so we can tell later if the
-    // user changed the selection while this request was still in flight.
     final requestGenreIds = Set<int>.from(_selectedGenreIds);
     final requestGenreObjects = _selectedGenreObjects;
 
@@ -242,6 +294,79 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
     }
   }
 
+  Future<void> _loadMoreMovies() async {
+    final wasEmpty = _deck.isEmpty;
+    final requestGenreIds = Set<int>.from(_selectedGenreIds);
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final movies = await TmdbApiService.instance.fetchPopularMovies(
+        page: _tmdbPage,
+        genreIds: requestGenreIds.toList(),
+      );
+
+      // Genre selection changed while the request was in flight — discard
+      // the result, the new selection's own request is already underway.
+      if (!_sameGenreSelection(requestGenreIds, _selectedGenreIds)) return;
+
+      _tmdbPage++;
+
+      final seenKeys = _deck.map((a) => a.uniqueKey).toSet();
+      final newMovies = movies.where((m) => seenKeys.add(m.uniqueKey)).toList();
+
+      // With no genre filter, shuffle purely randomly like anime mode does.
+      // With a filter, rank by how many selected genres each movie matches
+      // so the most relevant results surface first — reuses the same logic
+      // anime uses, since movies now carry proper genre strings too.
+      _rankByGenreMatch(newMovies, _selectedGenreObjects);
+
+      setState(() {
+        _deck.addAll(newMovies);
+        _isLoading = false;
+      });
+
+      if (wasEmpty && _deck.isNotEmpty && !_entrancePlayed) {
+        _entrancePlayed = true;
+        _entranceController.forward();
+      }
+    } catch (_) {
+      setState(() {
+        _isLoading = false;
+        if (_deck.isEmpty) {
+          _errorMessage = 'Could not load movies. Check your connection.';
+        }
+      });
+    }
+  }
+
+  // Switches between Anime and Movie mode, resetting the deck and
+  // swapping the genre list so the filter sheet shows the right genres.
+  void switchMode(bool newMode) {
+    if (isMovieMode == newMode) return;
+    setState(() {
+      isMovieMode = newMode;
+      _deck = [];
+      _lastPassedAnime = null;
+      _passedHistory.clear();
+      _tmdbPage = 1 + _random.nextInt(10);
+      _jikanPage = 1 + _random.nextInt(5);
+      _anilistPage = 1 + _random.nextInt(5);
+      _dragOffsetX = 0;
+      _dragOffsetY = 0;
+      _entrancePlayed = false;
+      // Clear the genre filter — selections from anime mode are meaningless
+      // in movie mode (different id/name spaces) and vice versa.
+      _selectedGenreIds = {};
+      // Point _genres at the correct list for the new mode so openGenreFilter()
+      // and _selectedGenreObjects both read from the right source.
+      _genres = isMovieMode ? _movieGenres : _animeGenres;
+    });
+    _loadMoreAnime();
+  }
   String _normalizeTitle(Anime anime) {
     return anime.title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
   }
@@ -287,10 +412,10 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
       _lastPassedAnime = null; // stale card from old filter, discard it
       _jikanPage = 1 + _random.nextInt(5);
       _anilistPage = 1 + _random.nextInt(5);
+      _tmdbPage = 1 + _random.nextInt(10);
       _dragOffsetX = 0;
       _dragOffsetY = 0;
-    });
-    _loadMoreAnime();
+    });    _loadMoreAnime();
   }
 
   void _removeGenre(int malId) {

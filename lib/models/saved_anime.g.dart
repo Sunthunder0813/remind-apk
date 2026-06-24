@@ -28,13 +28,14 @@ class SavedAnimeAdapter extends TypeAdapter<SavedAnime> {
       listType: fields[8] as String,
       savedAt: fields[9] as DateTime,
       remarks: fields[10] as String?,
+      isMovie: fields[11] == null ? false : fields[11] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, SavedAnime obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(12)
       ..writeByte(0)
       ..write(obj.uniqueKey)
       ..writeByte(1)
@@ -56,7 +57,9 @@ class SavedAnimeAdapter extends TypeAdapter<SavedAnime> {
       ..writeByte(9)
       ..write(obj.savedAt)
       ..writeByte(10)
-      ..write(obj.remarks);
+      ..write(obj.remarks)
+      ..writeByte(11)
+      ..write(obj.isMovie);
   }
 
   @override

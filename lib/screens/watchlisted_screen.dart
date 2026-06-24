@@ -185,6 +185,7 @@ class WatchlistedScreen extends StatefulWidget {
 
 class _WatchlistedScreenState extends State<WatchlistedScreen> {
   String? _selectedGenre; // null = "All"
+  String _sourceFilter = 'All'; // 'All', 'Anime', 'Movie'
 
   List<String> _allGenres(List<Anime> list) {
     final set = <String>{};
@@ -200,10 +201,18 @@ class _WatchlistedScreenState extends State<WatchlistedScreen> {
   }
 
   List<Anime> _filtered(List<Anime> list) {
-    if (_selectedGenre == null) return list;
     return list.where((a) {
-      if (_selectedGenre == 'Other') return a.genres.isEmpty;
-      return a.genres.contains(_selectedGenre);
+      final matchesSource = _sourceFilter == 'All'
+          ? true
+          : _sourceFilter == 'Movie'
+              ? a.isMovie
+              : !a.isMovie;
+      final matchesGenre = _selectedGenre == null
+          ? true
+          : _selectedGenre == 'Other'
+              ? a.genres.isEmpty
+              : a.genres.contains(_selectedGenre);
+      return matchesSource && matchesGenre;
     }).toList();
   }
 
@@ -377,6 +386,43 @@ class _WatchlistedScreenState extends State<WatchlistedScreen> {
     );
   }
 
+  Widget _buildSourceToggle(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          for (final label in ['All', 'Anime', 'Movie'])
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => setState(() => _sourceFilter = label),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _sourceFilter == label
+                        ? colorScheme.primary
+                        : Colors.white10,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _sourceFilter == label
+                          ? Colors.white
+                          : Colors.white54,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGenreChips(List<String> genres, ColorScheme colorScheme) {
     return SizedBox(
       height: 40,
@@ -440,12 +486,12 @@ class _WatchlistedScreenState extends State<WatchlistedScreen> {
                   Icon(Icons.bookmark_border, size: 64, color: Colors.grey.shade400),
                   const SizedBox(height: 16),
                   Text(
-                    'No watchlisted anime yet',
+                    'No watchlisted items yet',
                     style: TextStyle(fontSize: 18, color: Colors.grey.shade500),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Long-press a liked anime to add it here',
+                    'Long-press a liked item to add it here',
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                   ),
                 ],
@@ -464,7 +510,7 @@ class _WatchlistedScreenState extends State<WatchlistedScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        '${watchlisted.length} watchlisted anime',
+                        '${watchlisted.length} watchlisted',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -477,6 +523,7 @@ class _WatchlistedScreenState extends State<WatchlistedScreen> {
                 ),
               ),
 
+              _buildSourceToggle(colorScheme),
               _buildGenreChips(genres, colorScheme),
               const SizedBox(height: 8),
 
