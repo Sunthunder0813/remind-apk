@@ -1,126 +1,12 @@
 import 'package:flutter/material.dart';
 import '../models/anime.dart';
 import '../services/anime_like_service.dart';
+import '../widgets/anime_detail_sheet.dart';
 import '../widgets/skeleton_loader.dart';
 import 'notes_screen.dart';
 
-// Read-only anime detail popup — image, title, score, genres, synopsis.
-// Duplicated identically in watchlisted_screen.dart so each screen is
-// self-contained rather than depending on a shared host file for this.
 void _showAnimeDetailDialog(BuildContext context, Anime anime) {
-  showDialog(
-    context: context,
-    builder: (context) => Dialog(
-      backgroundColor: const Color(0xFF2C2831),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: AspectRatio(
-                  aspectRatio: 0.7,
-                  child: Image.network(
-                    anime.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Colors.white10,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.image_not_supported, color: Colors.white30),
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      anime.title,
-                      style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    if (anime.score != null) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.star_rounded, size: 18, color: Colors.amber),
-                          const SizedBox(width: 4),
-                          Text(
-                            anime.score!.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (anime.genres.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final genre in anime.genres)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                genre,
-                                style: const TextStyle(fontSize: 11.5, color: Colors.white70),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 14),
-                    Text(
-                      anime.synopsis,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        color: Colors.white70,
-                        height: 1.5,
-                      ),
-                    ),
-                    ],
-                ),
-              ),
-            ],
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Material(
-                color: Colors.black54,
-                shape: const CircleBorder(),
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 20),
-                  tooltip: 'Close',
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
+  showAnimeDetailSheet(context, anime);
 }
 
 // Shows everything the user liked on Discover as one flat grid, with
