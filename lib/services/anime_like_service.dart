@@ -82,7 +82,7 @@ class AnimeLikeService extends ChangeNotifier {
     // entry and an AniList entry can share the same malId without being
     // the same anime, so malId-only dedupe was a latent bug.
     if (_liked.any((a) => a.uniqueKey == anime.uniqueKey)) return;
-    _liked.add(anime);
+    _liked.insert(0, anime); // newest like goes first
     notifyListeners();
     DatabaseService.instance.saveSavedAnime(
       SavedAnime.fromAnime(anime, listType: _likedListType),

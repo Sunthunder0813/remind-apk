@@ -4,6 +4,8 @@
   import 'package:home_widget/home_widget.dart';
   import 'package:shared_preferences/shared_preferences.dart';
   import '../main.dart' show checklistUpdateStream;
+  import '../models/tmdb_genres.dart';
+  import '../services/anime_api_service.dart';
   import 'notes_screen.dart';
   import 'discover_screen.dart';
   import 'liked_anime_screen.dart';
@@ -22,7 +24,14 @@
     bool _widgetSetupDone = false;
     // Lifted from LikedAnimeScreen so the AppBar toggle can control them.
     String _likedSourceFilter = 'All';
-    String? _likedGenreSelection;
+    // Multi-select now, mirroring Discover's genre filter UX.
+    Set<String> _likedGenreSelection = {};
+
+    // Full genre catalogs (not just genres present on liked items) so the
+    // Liked screen's filter sheet can offer every genre Discover offers,
+    // e.g. "Isekai" even if the user has zero liked Isekai anime yet.
+    List<String> _animeGenreCatalog = [];
+    final List<String> _movieGenreCatalog = TmdbGenres.names;
 
     // New tab order: Notes, Discover, Liked Anime, Calendar
     final List<String> _titles = ['Notes', 'Discover', 'Liked Anime', 'Calendar'];
@@ -50,6 +59,24 @@
         _calendarKey.currentState?.reloadFromStorage();
       });
       _loadWidgetSetupState();
+      _loadAnimeGenreCatalog();
+    }
+
+    // Fetches the full Jikan anime genre list once, same source Discover
+    // uses — so the Liked screen's filter sheet can show genres like
+    // "Isekai" even when none of the user's liked anime have that tag yet.
+    Future<void> _loadAnimeGenreCatalog() async {
+      try {
+        final genres = await AnimeApiService.instance.fetchGenres();
+        if (!mounted) return;
+        setState(() {
+          _animeGenreCatalog = genres.map((g) => g.name).toList()..sort();
+        });
+      } catch (_) {
+        // Leave it empty on failure — the filter sheet will just show
+        // movie genres (if in Movie mode) or nothing (Anime/All), and
+        // the user can still browse/filter by source.
+      }
     }
 
     @override
@@ -276,7 +303,7 @@
                       sourceFilter: _likedSourceFilter,
                       onChanged: (val) => setState(() {
                         _likedSourceFilter = val;
-                        _likedGenreSelection = null;
+                        _likedGenreSelection = {};
                       }),
                     ),
                   ]
@@ -332,12 +359,17 @@
               opacity: _selectedIndex == 2 ? 1.0 : 0.0,
               child: LikedAnimeScreen(
                 sourceFilter: _likedSourceFilter,
-                selectedGenre: _likedGenreSelection,
+                selectedGenres: _likedGenreSelection,
+                availableGenres: _likedSourceFilter == 'Movie'
+                    ? _movieGenreCatalog
+                    : _likedSourceFilter == 'Anime'
+                        ? _animeGenreCatalog
+                        : ({..._animeGenreCatalog, ..._movieGenreCatalog}.toList()..sort()),
                 onSourceChanged: (val) => setState(() {
                   _likedSourceFilter = val;
-                  _likedGenreSelection = null;
+                  _likedGenreSelection = {};
                 }),
-                onGenreChanged: (val) => setState(() => _likedGenreSelection = val),
+                onGenresChanged: (val) => setState(() => _likedGenreSelection = val),
               ),
             ),
             // Index 3 — Calendar

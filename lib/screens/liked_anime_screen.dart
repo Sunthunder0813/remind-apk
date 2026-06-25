@@ -3,29 +3,39 @@ import '../models/anime.dart';
 import '../services/anime_like_service.dart';
 import '../widgets/anime_detail_sheet.dart';
 import '../widgets/skeleton_loader.dart';
+import '../widgets/alphabet_index.dart';
 import 'notes_screen.dart';
 
 void _showAnimeDetailDialog(BuildContext context, Anime anime) {
   showAnimeDetailSheet(context, anime);
 }
 
-// Shows everything the user liked on Discover as one flat grid, with
-// genre chips at the top to filter the view. Long-press a card to open
-// an actions menu with two choices: move it to the Watchlist (a separate
-// persisted list, reached via the center FAB) or remove it from Liked
-// entirely.
+// Shows everything the user liked on Discover as one flat grid. Genre
+// filtering is multi-select via a Discover-style bottom sheet (reached
+// through the filter icon), sourced from the FULL genre catalog for the
+// current source filter — not just genres present on liked items — so
+// genres like "Isekai" show up even with zero liked items in that genre.
+// Long-press a card opens an actions menu: move it to the Watchlist (a
+// separate persisted list, reached via the center FAB) or remove it from
+// Liked entirely.
 class LikedAnimeScreen extends StatefulWidget {
   final String sourceFilter;
-  final String? selectedGenre;
+  // Multi-select now, mirroring Discover's genre filter UX.
+  final Set<String> selectedGenres;
+  // Full genre catalog for the current source (Anime/Movie/All), owned by
+  // the parent (HomeScreen) — same pattern Discover uses for its own
+  // genre lists.
+  final List<String> availableGenres;
   final ValueChanged<String> onSourceChanged;
-  final ValueChanged<String?> onGenreChanged;
+  final ValueChanged<Set<String>> onGenresChanged;
 
   const LikedAnimeScreen({
     super.key,
     required this.sourceFilter,
-    required this.selectedGenre,
+    required this.selectedGenres,
+    required this.availableGenres,
     required this.onSourceChanged,
-    required this.onGenreChanged,
+    required this.onGenresChanged,
   });
 
   @override
@@ -33,20 +43,6 @@ class LikedAnimeScreen extends StatefulWidget {
 }
 
 class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
-
-  List<String> _allGenres(List<Anime> liked) {
-    final set = <String>{};
-    for (final anime in liked) {
-      if (anime.genres.isEmpty) {
-        set.add('Other');
-      } else {
-        set.addAll(anime.genres);
-      }
-    }
-    final list = set.toList()..sort();
-    return list;
-  }
-
   List<Anime> _filtered(List<Anime> liked) {
     return liked.where((a) {
       final matchesSource = widget.sourceFilter == 'All'
@@ -54,13 +50,22 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
           : widget.sourceFilter == 'Movie'
               ? a.isMovie
               : !a.isMovie;
-      final matchesGenre = widget.selectedGenre == null
+      final matchesGenre = widget.selectedGenres.isEmpty
           ? true
-          : widget.selectedGenre == 'Other'
-              ? a.genres.isEmpty
-              : a.genres.contains(widget.selectedGenre);
+          : widget.selectedGenres.contains('Other')
+              ? (a.genres.isEmpty || a.genres.any((g) => widget.selectedGenres.contains(g)))
+              : a.genres.any((g) => widget.selectedGenres.contains(g));
       return matchesSource && matchesGenre;
     }).toList();
+  }
+
+  // Compact label for the status-row chip, e.g. "Action", "Action +1" —
+  // mirrors DiscoverScreen's _genreSummaryLabel.
+  String get _genreSummaryLabel {
+    final selected = widget.selectedGenres.toList();
+    if (selected.isEmpty) return '';
+    if (selected.length == 1) return selected.first;
+    return '${selected.first} +${selected.length - 1}';
   }
 
   void _openColumnSettings(BuildContext context) {
@@ -188,51 +193,139 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
     );
   }
 
-  Widget _buildGenreChips(List<String> genres, ColorScheme colorScheme) {
-    return SizedBox(
-      height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: const Text('All'),
-              selected: widget.selectedGenre == null,
-              onSelected: (_) => widget.onGenreChanged(null),
-              selectedColor: colorScheme.primary,
-              labelStyle: TextStyle(
-                color: widget.selectedGenre == null ? Colors.white : Colors.black87,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          for (final genre in genres)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(genre),
-                selected: widget.selectedGenre == genre,
-                onSelected: (_) => widget.onGenreChanged(
-                  widget.selectedGenre == genre ? null : genre,
+  // Discover-style genre filter bottom sheet — multi-select checkboxes
+  // over the FULL catalog (widget.availableGenres), not just genres
+  // present on liked items. Includes the same A-Z quick-jump rail as
+  // Discover's filter sheet, with iOS-style press-and-drag support.
+  Future<void> _openGenreFilterSheet() async {
+    var working = {...widget.selectedGenres};
+    final scrollController = ScrollController();
+    const double rowHeight = 56;
+
+    final Map<String, double> letterOffsets = {};
+    for (int i = 0; i < widget.availableGenres.length; i++) {
+      final name = widget.availableGenres[i];
+      if (name.isEmpty) continue;
+      final letter = name[0].toUpperCase();
+      if (!letterOffsets.containsKey(letter)) {
+        letterOffsets[letter] = i * rowHeight;
+      }
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Filter by genre',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ),
+                          if (working.isNotEmpty)
+                            TextButton(
+                              onPressed: () => setSheetState(() => working.clear()),
+                              child: const Text('Clear'),
+                            ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.5,
+                      child: widget.availableGenres.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 24),
+                                child: Text(
+                                  'No genres available yet.',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  child: ListView.builder(
+                                    controller: scrollController,
+                                    itemExtent: rowHeight,
+                                    itemCount: widget.availableGenres.length,
+                                    itemBuilder: (context, index) {
+                                      final genre = widget.availableGenres[index];
+                                      final isSelected = working.contains(genre);
+                                      return CheckboxListTile(
+                                        value: isSelected,
+                                        controlAffinity: ListTileControlAffinity.leading,
+                                        activeColor: Theme.of(context).colorScheme.primary,
+                                        title: Text(genre),
+                                        onChanged: (checked) {
+                                          setSheetState(() {
+                                            if (checked == true) {
+                                              working.add(genre);
+                                            } else {
+                                              working.remove(genre);
+                                            }
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                                AlphabetIndex(
+                                  letterOffsets: letterOffsets,
+                                  onLetterTap: (offset) {
+                                    if (!scrollController.hasClients) return;
+                                    final maxScroll =
+                                        scrollController.position.maxScrollExtent;
+                                    scrollController.jumpTo(
+                                      offset.clamp(0.0, maxScroll),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            working.isEmpty
+                                ? 'Show all liked'
+                                : 'Apply (${working.length} selected)',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                selectedColor: colorScheme.primary,
-                labelStyle: TextStyle(
-                  color: widget.selectedGenre == genre ? Colors.white : Colors.black87,
-                  fontSize: 13,
-                ),
               ),
-            ),
-        ],
-      ),
-    );
+            );
+          },
+        );
+      },
+    ).whenComplete(scrollController.dispose);
+
+    widget.onGenresChanged(working);
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return ListenableBuilder(
       listenable: AnimeLikeService.instance,
       builder: (context, _) {
@@ -261,19 +354,33 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
         }
 
         final filtered = _filtered(liked);
-        final genres = _allGenres(filtered);
 
         return Column(
           children: [
+            // ── Slim status row — liked count + genre filter chip + layout ──
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
               child: Row(
                 children: [
                   Text(
-                    '${liked.length} liked',
+                    '${filtered.length} liked',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
+                  const SizedBox(width: 10),
+                  if (widget.selectedGenres.isNotEmpty)
+                    InputChip(
+                      label: Text(_genreSummaryLabel),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _openGenreFilterSheet,
+                      onDeleted: () => widget.onGenresChanged({}),
+                      deleteIcon: const Icon(Icons.close, size: 14),
+                    ),
                   const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.filter_alt_outlined),
+                    tooltip: 'Filter by genre',
+                    onPressed: _openGenreFilterSheet,
+                  ),
                   IconButton(
                     icon: const Icon(Icons.tune),
                     tooltip: 'Layout settings',
@@ -283,62 +390,76 @@ class _LikedAnimeScreenState extends State<LikedAnimeScreen> {
               ),
             ),
 
-            _buildGenreChips(genres, colorScheme),
-            const SizedBox(height: 8),
-
-            Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: filtered.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 0.62,
+            if (filtered.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.search_off, size: 56, color: Colors.grey.shade500),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No liked items match this filter',
+                        style: TextStyle(color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
                 ),
-                itemBuilder: (context, i) {
-                  final anime = filtered[i];
-                  return GestureDetector(
-                    onTap: () => _showAnimeDetailDialog(context, anime),
-                    onLongPress: () => _showAnimeActions(anime),
-                    child: Card(
-                      clipBehavior: Clip.antiAlias,
-                      margin: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Image.network(
-                              anime.imageUrl,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              loadingBuilder: (context, child, progress) {
-                                if (progress == null) return child;
-                                return const SkeletonBox();
-                              },
-                              errorBuilder: (_, __, ___) => Container(
-                                color: Colors.grey.shade300,
-                                child: const Icon(Icons.image_not_supported),
+              )
+            else
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filtered.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 0.62,
+                  ),
+                  itemBuilder: (context, i) {
+                    final anime = filtered[i];
+                    return GestureDetector(
+                      onTap: () => _showAnimeDetailDialog(context, anime),
+                      onLongPress: () => _showAnimeActions(anime),
+                      child: Card(
+                        clipBehavior: Clip.antiAlias,
+                        margin: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Image.network(
+                                anime.imageUrl,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, progress) {
+                                  if (progress == null) return child;
+                                  return const SkeletonBox();
+                                },
+                                errorBuilder: (_, __, ___) => Container(
+                                  color: Colors.grey.shade300,
+                                  child: const Icon(Icons.image_not_supported),
+                                ),
                               ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            child: Text(
-                              anime.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              child: Text(
+                                anime.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
           ],
         );
       },

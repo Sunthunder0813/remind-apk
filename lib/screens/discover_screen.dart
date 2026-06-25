@@ -6,6 +6,8 @@ import '../services/anime_api_service.dart';
 import '../services/anilist_api_service.dart';
 import '../services/tmdb_api_service.dart';
 import '../services/anime_like_service.dart';
+import '../models/tmdb_genres.dart';
+import '../widgets/alphabet_index.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -91,6 +93,11 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
   void initState() {
     super.initState();
 
+    // Whenever something gets liked (from anywhere — the deck swipe,
+    // the Passed History sheet, etc.), immediately drop it from the
+    // current deck too, so a liked anime never lingers on-screen here.
+    AnimeLikeService.instance.addListener(_pruneLikedFromDeck);
+
     _entranceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 480),
@@ -133,10 +140,26 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
 
   @override
   void dispose() {
+    AnimeLikeService.instance.removeListener(_pruneLikedFromDeck);
     _entranceController.dispose();
     _coachController.dispose();
     _shimmerController.dispose();
     super.dispose();
+  }
+
+  // Removes any deck cards that just became liked elsewhere (e.g. tapped
+  // "like" on a passed-history entry that's still sitting in the deck).
+  // Swiping liked from the deck itself already removes it in _swipeTopCard
+  // before this fires, so this is a no-op in that path — it only matters
+  // for the "liked from somewhere else" case.
+  void _pruneLikedFromDeck() {
+    if (_deck.isEmpty) return;
+    final likedKeys = AnimeLikeService.instance.liked.map((a) => a.uniqueKey).toSet();
+    final hadAny = _deck.any((a) => likedKeys.contains(a.uniqueKey));
+    if (!hadAny) return;
+    setState(() {
+      _deck.removeWhere((a) => likedKeys.contains(a.uniqueKey));
+    });
   }
 
   void _dismissCoachOverlay() {
@@ -164,28 +187,12 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
     _scheduleCoachAutoDismiss();
   }
 
-  // Static TMDB genre list — TMDB genre IDs never change, so there's no
-  // need to fetch them; we map them the same way TmdbApiService does.
-  static const List<Map<String, dynamic>> _tmdbGenreData = [
-    {'malId': 28,    'name': 'Action'},
-    {'malId': 12,    'name': 'Adventure'},
-    {'malId': 16,    'name': 'Animation'},
-    {'malId': 35,    'name': 'Comedy'},
-    {'malId': 80,    'name': 'Crime'},
-    {'malId': 99,    'name': 'Documentary'},
-    {'malId': 18,    'name': 'Drama'},
-    {'malId': 10751, 'name': 'Family'},
-    {'malId': 14,    'name': 'Fantasy'},
-    {'malId': 36,    'name': 'History'},
-    {'malId': 27,    'name': 'Horror'},
-    {'malId': 10402, 'name': 'Music'},
-    {'malId': 9648,  'name': 'Mystery'},
-    {'malId': 10749, 'name': 'Romance'},
-    {'malId': 878,   'name': 'Sci-Fi'},
-    {'malId': 53,    'name': 'Thriller'},
-    {'malId': 10752, 'name': 'War'},
-    {'malId': 37,    'name': 'Western'},
-  ];
+  // Static TMDB genre list now lives in TmdbGenres (shared with HomeScreen
+  // / LikedAnimeScreen) so there's a single source of truth instead of two
+  // hardcoded copies that can drift apart.
+  static final List<Map<String, dynamic>> _tmdbGenreData = TmdbGenres.data
+      .map((g) => {'malId': g['id'], 'name': g['name']})
+      .toList();
 
   // Anime genres fetched from Jikan; TMDB genres are static above.
   List<AnimeGenre> _animeGenres = [];
@@ -271,10 +278,12 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
 
     final combined = [...jikanResults, ...anilistResults];
 
+    final likedKeys = AnimeLikeService.instance.liked.map((a) => a.uniqueKey).toSet();
     final seenKeys = _deck.map((a) => a.uniqueKey).toSet();
     final seenTitles = _deck.map(_normalizeTitle).toSet();
     final newAnime = <Anime>[];
     for (final anime in combined) {
+      if (likedKeys.contains(anime.uniqueKey)) continue;
       final keyIsNew = seenKeys.add(anime.uniqueKey);
       final titleIsNew = seenTitles.add(_normalizeTitle(anime));
       if (keyIsNew && titleIsNew) {
@@ -315,8 +324,11 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
 
       _tmdbPage++;
 
+      final likedKeys = AnimeLikeService.instance.liked.map((a) => a.uniqueKey).toSet();
       final seenKeys = _deck.map((a) => a.uniqueKey).toSet();
-      final newMovies = movies.where((m) => seenKeys.add(m.uniqueKey)).toList();
+      final newMovies = movies
+          .where((m) => !likedKeys.contains(m.uniqueKey) && seenKeys.add(m.uniqueKey))
+          .toList();
 
       // With no genre filter, shuffle purely randomly like anime mode does.
       // With a filter, rank by how many selected genres each movie matches
@@ -578,16 +590,14 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
                               },
                             ),
                           ),
-                          _AlphabetIndex(
+                          AlphabetIndex(
                             letterOffsets: letterOffsets,
                             onLetterTap: (offset) {
                               if (!scrollController.hasClients) return;
                               final maxScroll =
                                   scrollController.position.maxScrollExtent;
-                              scrollController.animateTo(
+                              scrollController.jumpTo(
                                 offset.clamp(0.0, maxScroll),
-                                duration: const Duration(milliseconds: 250),
-                                curve: Curves.easeOut,
                               );
                             },
                           ),
@@ -628,7 +638,7 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
     setState(() {
       _deck.removeAt(0);
       if (liked) {
-        AnimeLikeService.instance.like(anime);
+        AnimeLikeService.instance.like(_enrichWithActiveFilterGenres(anime));
         _lastPassedAnime = null;
       } else {
         _lastPassedAnime = anime;
@@ -641,6 +651,32 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
     if (_deck.length < 5 && !_isLoading) {
       _loadMoreAnime();
     }
+  }
+
+  // Jikan/AniList sometimes match a genre filter server-side (e.g. Isekai)
+  // without that genre name actually appearing in the returned anime's own
+  // `genres` array — a quirk of their API, not something fixable by
+  // re-parsing the response. So when liking an anime while a genre filter
+  // is active, we stamp any missing active-filter genre names onto it
+  // directly, ensuring the Liked screen's filter can find it later by the
+  // same genre the user used to discover it.
+  Anime _enrichWithActiveFilterGenres(Anime anime) {
+    final activeNames = _selectedGenreObjects.map((g) => g.name).toList();
+    if (activeNames.isEmpty) return anime;
+
+    final missing = activeNames.where((n) => !anime.genres.contains(n));
+    if (missing.isEmpty) return anime;
+
+    return Anime(
+      malId: anime.malId,
+      title: anime.title,
+      imageUrl: anime.imageUrl,
+      synopsis: anime.synopsis,
+      score: anime.score,
+      genres: [...anime.genres, ...missing],
+      source: anime.source,
+      isMovie: anime.isMovie,
+    );
   }
 
   // Double-tap restore: puts the last passed card back on top of the deck.
@@ -836,7 +872,8 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
                               onPressed: alreadyLiked
                                   ? null
                                   : () {
-                                      AnimeLikeService.instance.like(anime);
+                                      AnimeLikeService.instance
+                                          .like(_enrichWithActiveFilterGenres(anime));
                                       setSheetState(() {});
                                     },
                             ),
@@ -892,7 +929,7 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.55, 1.0],
+                  stops: const [0.0, 0.2, 1.0],
                   colors: [
                     Colors.transparent,
                     Colors.black.withOpacity(0.75),
@@ -948,7 +985,7 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
                       fontSize: 13,
                       height: 1.35,
                     ),
-                    maxLines: 2,
+                    maxLines: 7,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -995,7 +1032,7 @@ class DiscoverScreenState extends State<DiscoverScreen> with TickerProviderState
             right: 0,
             bottom: 0,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 56, 20, 22),
+              padding: const EdgeInsets.fromLTRB(20, 280, 20, 22),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1395,59 +1432,6 @@ Widget _buildCoachOverlay() {
                 ),
         ),
       ],
-    );
-  }
-}
-
-// Vertical A-Z quick-jump index running down the right edge of the genre
-// list, like the iOS Contacts list. Tapping a letter scrolls straight to
-// the first genre starting with it; letters with no matching genre are
-// dimmed and not tappable.
-class _AlphabetIndex extends StatelessWidget {
-  final Map<String, double> letterOffsets;
-  final void Function(double offset) onLetterTap;
-
-  const _AlphabetIndex({
-    required this.letterOffsets,
-    required this.onLetterTap,
-  });
-
-  static const List<String> _letters = [
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final activeColor = Theme.of(context).colorScheme.primary;
-
-    return Container(
-      width: 22,
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          for (final letter in _letters)
-            Builder(
-              builder: (context) {
-                final offset = letterOffsets[letter];
-                final isAvailable = offset != null;
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: isAvailable ? () => onLetterTap(offset) : null,
-                  child: Text(
-                    letter,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: isAvailable ? activeColor : Colors.white24,
-                    ),
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
     );
   }
 }
